@@ -182,32 +182,98 @@ def admin_products_upload(request):
             return redirect('admin_products')
 
         try:
-            # CSV yoki JSON
+            # Faylni o'qish
+            content = file.read()
+
+            # Encoding aniqlash
+            try:
+                decoded = content.decode('utf-8-sig')
+            except:
+                try:
+                    decoded = content.decode('cp1251')  # Windows Cyrillic
+                except:
+                    decoded = content.decode('latin-1')
+
+            lines = decoded.splitlines()
+
             if file.name.endswith('.csv'):
-                decoded = file.read().decode('utf-8-sig').splitlines()
-                reader = csv.DictReader(decoded, delimiter=';')
+                # Delimiter aniqlash (vergul yoki nuqtali vergul)
+                first_line = lines[0] if lines else ''
+                delimiter = ';' if ';' in first_line else ','
+
+                reader = csv.DictReader(lines, delimiter=delimiter)
                 count = 0
-                for row in reader:
-                    code = row.get('code') or row.get('kod') or row.get('нумерация') or row.get('№')
-                    name = row.get('name') or row.get('nom') or row.get('товар номи') or row.get('наименование')
-                    manufacturer = row.get('manufacturer') or row.get('ishlab_chiqaruvchi') or row.get(
-                        'ишлаб чикарувчи') or row.get('производитель') or ''
+                errors = []
+
+                for i, row in enumerate(reader, start=2):
+                    # Turli nom variantlari
+                    code = (
+                        row.get('code') or
+                        row.get('kod') or
+                        row.get('Code') or
+                        row.get('CODE') or
+                        row.get('№') or
+                        row.get('нумерация') or
+                        row.get('Нумерация') or
+                        row.get('\ufeffcode') or  # BOM bilan
+                        row.get('\ufeff№') or
+                        list(row.values())[0] if row else None  # Birinchi ustun
+                    )
+
+                    name = (
+                        row.get('name') or
+                        row.get('nom') or
+                        row.get('Name') or
+                        row.get('NAME') or
+                        row.get('товар номи') or
+                        row.get('Товар номи') or
+                        row.get('наименование') or
+                        row.get('Наименование') or
+                        row.get('tovar') or
+                        list(row.values())[1] if len(row) > 1 else None  # Ikkinchi ustun
+                    )
+
+                    manufacturer = (
+                        row.get('manufacturer') or
+                        row.get('ishlab_chiqaruvchi') or
+                        row.get('Manufacturer') or
+                        row.get('ишлаб чикарувчи') or
+                        row.get('Ишлаб чикарувчи') or
+                        row.get('производитель') or
+                        row.get('Производитель') or
+                        list(row.values())[2] if len(row) > 2 else ''  # Uchinchi ustun
+                    )
 
                     if code and name:
-                        Product.objects.update_or_create(
-                            code=str(code).strip(),
-                            defaults={
-                                'name': str(name).strip(),
-                                'manufacturer': str(manufacturer).strip()
-                            }
-                        )
-                        count += 1
+                        code_clean = str(code).strip()
+                        name_clean = str(name).strip()
+                        manufacturer_clean = str(manufacturer).strip() if manufacturer else ''
 
-                messages.success(request, f'{count} ta tovar yuklandi!')
+                        if code_clean and name_clean:
+                            Product.objects.update_or_create(
+                                code=code_clean,
+                                defaults={
+                                    'name': name_clean,
+                                    'manufacturer': manufacturer_clean
+                                }
+                            )
+                            count += 1
+                    else:
+                        if i <= 5:  # Faqat birinchi 5 ta xatoni ko'rsat
+                            errors.append(f"Qator {i}: code={code}, name={name}")
+
+                if count > 0:
+                    messages.success(request, f'{count} ta tovar yuklandi!')
+                else:
+                    messages.error(request, 'Hech qanday tovar yuklanmadi. CSV formatini tekshiring.')
+
+                if errors:
+                    messages.warning(request, f'Xatolar: {"; ".join(errors)}')
 
             elif file.name.endswith('.json'):
-                data = json.load(file)
+                data = json.loads(decoded)
                 count = 0
+
                 for item in data:
                     code = item.get('code') or item.get('kod')
                     name = item.get('name') or item.get('nom')
@@ -233,7 +299,6 @@ def admin_products_upload(request):
         return redirect('admin_products')
 
     return render(request, 'sklad/admin/products_upload.html')
-
 
 # ==================== INVENTORY (1C QOLDIQ) ====================
 
