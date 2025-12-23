@@ -1,0 +1,187 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}Natijalar | Reviziya №{{ revision.revision_number }}{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb" style="font-size: 14px;">
+            <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}" class="text-secondary">Omborlar</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'admin_warehouse_detail' revision.warehouse.pk %}" class="text-secondary">{{ revision.warehouse.name }}</a></li>
+            <li class="breadcrumb-item active text-white">Natijalar</li>
+        </ol>
+    </nav>
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+        <div class="page-header mb-0">
+            <h1 class="page-title">Reviziya №{{ revision.revision_number }} natijalari</h1>
+            <p class="page-subtitle">{{ revision.created_at|date:"d.m.Y" }} | {{ revision.warehouse.name }}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'admin_revision_export' revision.pk %}" class="btn btn-outline-custom">
+                <i class="bi bi-download me-2"></i>Yuklab olish
+            </a>
+            <a href="{% url 'admin_unaccounted_export' revision.pk %}" class="btn btn-outline-custom">
+                <i class="bi bi-question-circle me-2"></i>Neuchtennie
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-value">{{ stats.total }}</div>
+                <div class="stat-label">Jami pozitsiyalar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card" style="border-left: 3px solid var(--success);">
+                <div class="stat-value" style="color: var(--success);">{{ stats.correct }}</div>
+                <div class="stat-label">To'g'ri</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card" style="border-left: 3px solid var(--danger);">
+                <div class="stat-value" style="color: var(--danger);">{{ stats.shortage }}</div>
+                <div class="stat-label">Kam</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card" style="border-left: 3px solid var(--warning);">
+                <div class="stat-value" style="color: var(--warning);">{{ stats.excess }}</div>
+                <div class="stat-label">Ko'p</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card-custom mb-4">
+        <div class="card-body py-3">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Status bo'yicha</label>
+                    <select name="status" class="form-select" onchange="this.form.submit()">
+                        <option value="">Barchasi</option>
+                        <option value="correct" {% if status_filter == 'correct' %}selected{% endif %}>To'g'ri</option>
+                        <option value="shortage" {% if status_filter == 'shortage' %}selected{% endif %}>Kam</option>
+                        <option value="excess" {% if status_filter == 'excess' %}selected{% endif %}>Ko'p</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Qidirish</label>
+                    <input type="text" name="search" class="form-control"
+                           placeholder="Tovar nomi, kod yoki seriya..."
+                           value="{{ search }}">
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-outline-custom w-100">
+                        <i class="bi bi-search me-2"></i>Qidirish
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Results table -->
+    <div class="card-custom">
+        <div class="card-header">
+            <i class="bi bi-table me-2"></i>Natijalar
+        </div>
+        <div class="card-body p-0">
+            {% if results %}
+            <div class="table-responsive">
+                <table class="table-custom">
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>Tovar nomi</th>
+                            <th>Ishlab chiqaruvchi</th>
+                            <th>Seriya</th>
+                            <th>Srok</th>
+                            <th class="text-end">1C</th>
+                            <th class="text-end">Haqiqiy</th>
+                            <th class="text-end">Farq</th>
+                            <th>Natija</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for result in results %}
+                        <tr>
+                            <td class="text-secondary">{{ forloop.counter }}</td>
+                            <td>{{ result.product.name|truncatechars:35 }}</td>
+                            <td class="text-secondary">{{ result.product.manufacturer|truncatechars:20|default:"-" }}</td>
+                            <td><code style="color: var(--text-secondary);">{{ result.series|default:"-" }}</code></td>
+                            <td>{{ result.expiry_date|date:"d.m.Y"|default:"-" }}</td>
+                            <td class="text-end">{{ result.expected_quantity }}</td>
+                            <td class="text-end"><strong>{{ result.actual_quantity }}</strong></td>
+                            <td class="text-end">
+                                {% if result.difference > 0 %}
+                                <span style="color: var(--warning);">+{{ result.difference }}</span>
+                                {% elif result.difference < 0 %}
+                                <span style="color: var(--danger);">{{ result.difference }}</span>
+                                {% else %}
+                                <span class="text-secondary">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if result.status == 'correct' %}
+                                <span class="badge-status badge-correct">To'g'ri</span>
+                                {% elif result.status == 'shortage' %}
+                                <span class="badge-status badge-shortage">Kam</span>
+                                {% else %}
+                                <span class="badge-status badge-excess">Ko'p</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="bi bi-inbox"></i>
+                <h5>Natijalar yo'q</h5>
+                <p>Filtrni o'zgartiring yoki reviziya tugashini kuting</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Unaccounted items -->
+    {% if unaccounted %}
+    <div class="card-custom mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-question-circle me-2 text-warning"></i>Hisobda yo'q tovarlar (Neuchtennie)</span>
+            <span class="badge bg-warning text-dark">{{ unaccounted.count }}</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table-custom">
+                <thead>
+                    <tr>
+                        <th>Tovar</th>
+                        <th>Seriya</th>
+                        <th>Srok</th>
+                        <th>Soni</th>
+                        <th>Revizor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in unaccounted %}
+                    <tr>
+                        <td>{{ item.product.name|truncatechars:40 }}</td>
+                        <td><code style="color: var(--text-secondary);">{{ item.series|default:"-" }}</code></td>
+                        <td>{{ item.expiry_date|date:"d.m.Y"|default:"-" }}</td>
+                        <td><strong>{{ item.quantity }}</strong></td>
+                        <td class="text-secondary">{{ item.revizor.full_name }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

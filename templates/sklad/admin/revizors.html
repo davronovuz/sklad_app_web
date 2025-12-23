@@ -1,0 +1,72 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}Revizorlar | Sklad Reviziya{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="page-header mb-0">
+            <h1 class="page-title">Revizorlar</h1>
+            <p class="page-subtitle">Tizim foydalanuvchilari</p>
+        </div>
+        <a href="{% url 'admin_revizor_create' %}" class="btn btn-primary-custom">
+            <i class="bi bi-person-plus me-2"></i>Yangi revizor
+        </a>
+    </div>
+
+    <!-- Revizors -->
+    <div class="card-custom">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-people me-2"></i>Revizorlar</span>
+            <span class="badge bg-secondary">{{ revizors.count }}</span>
+        </div>
+        <div class="card-body p-0">
+            {% if revizors %}
+            <table class="table-custom">
+                <thead>
+                    <tr>
+                        <th>Ism</th>
+                        <th>Login</th>
+                        <th>Yaratilgan</th>
+                        <th>Reviziyalar</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for revizor in revizors %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div style="width: 32px; height: 32px; background: var(--bg-hover); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600;">
+                                    {{ revizor.full_name|slice:":1"|upper|default:revizor.username|slice:":1"|upper }}
+                                </div>
+                                <span>{{ revizor.full_name|default:revizor.username }}</span>
+                            </div>
+                        </td>
+                        <td><code style="color: var(--text-secondary);">{{ revizor.username }}</code></td>
+                        <td class="text-secondary">{{ revizor.created_at|date:"d.m.Y" }}</td>
+                        <td>{{ revizor.assignments.count }} ta</td>
+                        <td class="text-end">
+                            <a href="{% url 'admin_revizor_delete' revizor.pk %}" class="btn btn-ghost btn-sm text-danger">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <i class="bi bi-people"></i>
+                <h5>Revizorlar yo'q</h5>
+                <p>Birinchi revizoringizni yarating</p>
+                <a href="{% url 'admin_revizor_create' %}" class="btn btn-primary-custom mt-3">
+                    <i class="bi bi-person-plus me-2"></i>Revizor yaratish
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

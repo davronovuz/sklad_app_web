@@ -1,0 +1,140 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}{{ warehouse.name }} | Sklad Reviziya{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb" style="font-size: 14px;">
+            <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}" class="text-secondary">Omborlar</a></li>
+            <li class="breadcrumb-item active text-white">{{ warehouse.name }}</li>
+        </ol>
+    </nav>
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+        <div class="page-header mb-0">
+            <h1 class="page-title">{{ warehouse.name }}</h1>
+            <p class="page-subtitle">
+                {% if warehouse.address %}{{ warehouse.address }}{% else %}Manzil ko'rsatilmagan{% endif %}
+            </p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'admin_inventory_upload' warehouse.pk %}" class="btn btn-outline-custom">
+                <i class="bi bi-upload me-2"></i>Qoldiq yuklash
+            </a>
+            <a href="{% url 'admin_revision_create' warehouse.pk %}" class="btn btn-primary-custom">
+                <i class="bi bi-plus-lg me-2"></i>Reviziya boshlash
+            </a>
+            <div class="dropdown">
+                <button class="btn btn-ghost" data-bs-toggle="dropdown">
+                    <i class="bi bi-three-dots-vertical"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="{% url 'admin_warehouse_edit' warehouse.pk %}">
+                        <i class="bi bi-pencil"></i>Tahrirlash
+                    </a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="{% url 'admin_warehouse_delete' warehouse.pk %}">
+                        <i class="bi bi-trash"></i>O'chirish
+                    </a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="bi bi-clipboard"></i></div>
+                <div class="stat-value">{{ revisions.count }}</div>
+                <div class="stat-label">Reviziyalar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="bi bi-archive"></i></div>
+                <div class="stat-value">{{ inventory_count }}</div>
+                <div class="stat-label">Tovar qoldiqlari</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revisions -->
+    <div class="card-custom">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-clipboard-check me-2"></i>Reviziyalar</span>
+            <a href="{% url 'admin_revision_create' warehouse.pk %}" class="btn btn-ghost btn-sm">
+                <i class="bi bi-plus-lg me-1"></i>Yangi
+            </a>
+        </div>
+        <div class="card-body p-0">
+            {% if revisions %}
+            <table class="table-custom">
+                <thead>
+                    <tr>
+                        <th>Reviziya</th>
+                        <th>Sana</th>
+                        <th>Revizorlar</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for revision in revisions %}
+                    <tr>
+                        <td>
+                            <strong>Reviziya №{{ revision.revision_number }}</strong>
+                        </td>
+                        <td>{{ revision.created_at|date:"d.m.Y H:i" }}</td>
+                        <td>{{ revision.assignments.count }} ta</td>
+                        <td>
+                            {% if revision.status == 'pending' %}
+                            <span class="badge-status badge-pending">
+                                <i class="bi bi-clock"></i> Kutilmoqda
+                            </span>
+                            {% elif revision.status == 'in_progress' %}
+                            <span class="badge-status badge-progress">
+                                <i class="bi bi-arrow-repeat"></i> Jarayonda
+                            </span>
+                            {% else %}
+                            <span class="badge-status badge-completed">
+                                <i class="bi bi-check"></i> Tugallangan
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if revision.status == 'pending' %}
+                            <a href="{% url 'admin_revision_start' revision.pk %}" class="btn btn-ghost btn-sm text-success">
+                                <i class="bi bi-play-fill"></i> Boshlash
+                            </a>
+                            {% endif %}
+                            <a href="{% url 'admin_revision_detail' revision.pk %}" class="btn btn-ghost btn-sm">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            {% if revision.status == 'completed' %}
+                            <a href="{% url 'admin_revision_results' revision.pk %}" class="btn btn-ghost btn-sm">
+                                <i class="bi bi-bar-chart"></i> Natijalar
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <i class="bi bi-clipboard"></i>
+                <h5>Reviziyalar yo'q</h5>
+                <p>Birinchi reviziyani boshlang</p>
+                <a href="{% url 'admin_revision_create' warehouse.pk %}" class="btn btn-primary-custom mt-3">
+                    <i class="bi bi-plus-lg me-2"></i>Reviziya boshlash
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

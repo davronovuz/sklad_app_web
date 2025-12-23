@@ -1,0 +1,344 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}Reviziya | Sklad Reviziya{% endblock %}
+
+{% block extra_css %}
+<style>
+    .search-container {
+        position: relative;
+    }
+    .search-results {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-top: none;
+        border-radius: 0 0 10px 10px;
+        max-height: 400px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: none;
+    }
+    .search-results.show {
+        display: block;
+    }
+    .search-item {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .search-item:hover {
+        background: var(--bg-hover);
+    }
+    .search-item:last-child {
+        border-bottom: none;
+    }
+    .search-item .name {
+        font-weight: 500;
+        margin-bottom: 2px;
+    }
+    .search-item .meta {
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+    .search-item .highlight {
+        background: rgba(245, 158, 11, 0.3);
+        padding: 1px 3px;
+        border-radius: 2px;
+    }
+
+    .product-modal-header {
+        background: var(--bg-secondary);
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+    }
+    .product-modal-header h5 {
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+    .product-modal-header p {
+        color: var(--text-secondary);
+        margin: 0;
+        font-size: 14px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <div class="page-header mb-0">
+            <h1 class="page-title">Reviziya №{{ revision.revision_number }}</h1>
+            <p class="page-subtitle">{{ revision.warehouse.name }}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'revizor_items' revision.pk %}" class="btn btn-outline-custom">
+                <i class="bi bi-list-ul me-2"></i>Obzor revizii
+            </a>
+        </div>
+    </div>
+
+    <!-- Search -->
+    <div class="card-custom mb-4">
+        <div class="card-body">
+            <label class="form-label">Tovar qidirish</label>
+            <div class="search-container">
+                <input type="text"
+                       id="productSearch"
+                       class="form-control form-control-lg"
+                       placeholder="Tovar nomini yoki kodini kiriting..."
+                       autocomplete="off">
+                <div class="search-results" id="searchResults"></div>
+            </div>
+            <div class="form-text mt-2">
+                <i class="bi bi-info-circle me-1"></i>Kamida 2 ta harf kiriting
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent items quick view -->
+    <div class="card-custom">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-clock-history me-2"></i>Oxirgi kiritilganlar</span>
+            <a href="{% url 'revizor_items' revision.pk %}" class="btn btn-ghost btn-sm">
+                Barchasini ko'rish <i class="bi bi-arrow-right ms-1"></i>
+            </a>
+        </div>
+        <div class="card-body p-0" id="recentItems">
+            <div class="empty-state py-4">
+                <i class="bi bi-inbox" style="font-size: 32px;"></i>
+                <p class="mb-0 mt-2">Hali tovar kiritilmagan</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Product Modal -->
+<div class="modal fade" id="productModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Tovar kiritish</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="product-modal-header">
+                    <h5 id="modalProductName">-</h5>
+                    <p id="modalProductManufacturer">-</p>
+                </div>
+
+                <input type="hidden" id="modalProductId">
+
+                <div class="mb-3">
+                    <label class="form-label">Seriya</label>
+                    <input type="text" id="modalSeries" class="form-control" placeholder="Seriya raqami">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Yaroqlilik muddati (Srok) <span class="text-danger">*</span></label>
+                    <input type="date" id="modalExpiry" class="form-control"
+                           min="2025-01-01" max="2050-12-31" required>
+                    <div class="form-text">2025 - 2050 oralig'ida</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Soni <span class="text-danger">*</span></label>
+                    <input type="number" id="modalQuantity" class="form-control"
+                           min="0.01" step="0.01" placeholder="Miqdorni kiriting" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-custom" data-bs-dismiss="modal">Bekor qilish</button>
+                <button type="button" class="btn btn-primary-custom" id="saveItemBtn">
+                    <i class="bi bi-check-lg me-2"></i>Saqlash
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const revisionId = {{ revision.pk }};
+const searchInput = document.getElementById('productSearch');
+const searchResults = document.getElementById('searchResults');
+const productModal = new bootstrap.Modal(document.getElementById('productModal'));
+
+let searchTimeout;
+
+// Search products
+searchInput.addEventListener('input', function() {
+    clearTimeout(searchTimeout);
+    const query = this.value.trim();
+
+    if (query.length < 2) {
+        searchResults.classList.remove('show');
+        return;
+    }
+
+    searchTimeout = setTimeout(() => {
+        fetch(`/api/products/search/?q=${encodeURIComponent(query)}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.products && data.products.length > 0) {
+                    searchResults.innerHTML = data.products.map(p => `
+                        <div class="search-item" onclick="selectProduct(${p.id}, '${escapeHtml(p.name)}', '${escapeHtml(p.manufacturer || '')}')">
+                            <div class="name">${highlightText(p.name, query)}</div>
+                            <div class="meta">
+                                <span class="me-3"><i class="bi bi-upc me-1"></i>${p.code}</span>
+                                ${p.manufacturer ? `<span><i class="bi bi-building me-1"></i>${p.manufacturer}</span>` : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                    searchResults.classList.add('show');
+                } else {
+                    searchResults.innerHTML = `
+                        <div class="p-4 text-center text-secondary">
+                            <i class="bi bi-search me-2"></i>Tovar topilmadi
+                        </div>
+                    `;
+                    searchResults.classList.add('show');
+                }
+            });
+    }, 300);
+});
+
+// Hide results on click outside
+document.addEventListener('click', function(e) {
+    if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+        searchResults.classList.remove('show');
+    }
+});
+
+// Select product
+function selectProduct(id, name, manufacturer) {
+    document.getElementById('modalProductId').value = id;
+    document.getElementById('modalProductName').textContent = name;
+    document.getElementById('modalProductManufacturer').textContent = manufacturer || 'Ishlab chiqaruvchi ko\'rsatilmagan';
+
+    // Clear form
+    document.getElementById('modalSeries').value = '';
+    document.getElementById('modalExpiry').value = '';
+    document.getElementById('modalQuantity').value = '';
+
+    searchResults.classList.remove('show');
+    searchInput.value = '';
+
+    productModal.show();
+}
+
+// Save item
+document.getElementById('saveItemBtn').addEventListener('click', function() {
+    const productId = document.getElementById('modalProductId').value;
+    const series = document.getElementById('modalSeries').value.trim();
+    const expiryDate = document.getElementById('modalExpiry').value;
+    const quantity = document.getElementById('modalQuantity').value;
+
+    // Validation
+    if (!expiryDate) {
+        alert('Yaroqlilik muddatini kiriting!');
+        return;
+    }
+
+    const year = parseInt(expiryDate.split('-')[0]);
+    if (year < 2025 || year > 2050) {
+        alert('Srok 2025-2050 oralig\'ida bo\'lishi kerak!');
+        return;
+    }
+
+    if (!quantity || parseFloat(quantity) <= 0) {
+        alert('Miqdorni kiriting!');
+        return;
+    }
+
+    // Save
+    fetch('/api/items/add/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            revision_id: revisionId,
+            product_id: productId,
+            series: series,
+            expiry_date: expiryDate,
+            quantity: parseFloat(quantity)
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            productModal.hide();
+            showToast(data.message, 'success');
+            loadRecentItems();
+        } else {
+            alert(data.error || 'Xatolik yuz berdi!');
+        }
+    })
+    .catch(err => {
+        alert('Xatolik: ' + err.message);
+    });
+});
+
+// Load recent items
+function loadRecentItems() {
+    fetch(`{% url 'revizor_items' revision.pk %}?format=json`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.items && data.items.length > 0) {
+                const recent = data.items.slice(0, 5);
+                document.getElementById('recentItems').innerHTML = `
+                    <table class="table-custom">
+                        <tbody>
+                            ${recent.map(item => `
+                                <tr>
+                                    <td>${item.product_name}</td>
+                                    <td><code style="color: var(--text-secondary);">${item.series || '-'}</code></td>
+                                    <td>${item.expiry_date || '-'}</td>
+                                    <td><strong>${item.quantity}</strong></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            }
+        })
+        .catch(() => {});
+}
+
+// Helper functions
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML.replace(/'/g, "\\'");
+}
+
+function highlightText(text, query) {
+    const regex = new RegExp(`(${query})`, 'gi');
+    return text.replace(regex, '<span class="highlight">$1</span>');
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-custom alert-${type} position-fixed fade-in`;
+    toast.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `<i class="bi bi-check-circle me-2"></i>${message}`;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 500);
+    }, 3000);
+}
+
+// Initial load
+loadRecentItems();
+</script>
+{% endblock %}

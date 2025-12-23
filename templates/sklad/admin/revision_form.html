@@ -1,0 +1,72 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}Yangi reviziya | Sklad Reviziya{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb" style="font-size: 14px;">
+            <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}" class="text-secondary">Omborlar</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'admin_warehouse_detail' warehouse.pk %}" class="text-secondary">{{ warehouse.name }}</a></li>
+            <li class="breadcrumb-item active text-white">Yangi reviziya</li>
+        </ol>
+    </nav>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-6">
+            <div class="card-custom">
+                <div class="card-header">
+                    <i class="bi bi-clipboard-plus me-2"></i>Yangi reviziya yaratish
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-custom alert-info mb-4">
+                        <i class="bi bi-building me-2"></i>
+                        <strong>{{ warehouse.name }}</strong> uchun reviziya
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-4">
+                            <label class="form-label">Revizorlarni tanlang <span class="text-danger">*</span></label>
+
+                            {% if revizors %}
+                            <div class="card-custom p-3" style="max-height: 300px; overflow-y: auto;">
+                                {% for revizor in revizors %}
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox"
+                                           name="revizors" value="{{ revizor.pk }}"
+                                           id="revizor{{ revizor.pk }}">
+                                    <label class="form-check-label" for="revizor{{ revizor.pk }}">
+                                        <span class="fw-medium">{{ revizor.full_name }}</span>
+                                        <span class="text-secondary ms-2">({{ revizor.username }})</span>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="alert alert-custom alert-warning">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                Revizorlar yo'q. Avval <a href="{% url 'admin_revizor_create' %}" class="text-white">revizor yarating</a>.
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        {% if revizors %}
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary-custom">
+                                <i class="bi bi-check-lg me-2"></i>Reviziya yaratish
+                            </button>
+                            <a href="{% url 'admin_warehouse_detail' warehouse.pk %}" class="btn btn-outline-custom">
+                                Bekor qilish
+                            </a>
+                        </div>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

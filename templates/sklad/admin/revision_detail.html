@@ -1,0 +1,152 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}Reviziya №{{ revision.revision_number }} | Sklad Reviziya{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb" style="font-size: 14px;">
+            <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}" class="text-secondary">Omborlar</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'admin_warehouse_detail' revision.warehouse.pk %}" class="text-secondary">{{ revision.warehouse.name }}</a></li>
+            <li class="breadcrumb-item active text-white">Reviziya №{{ revision.revision_number }}</li>
+        </ol>
+    </nav>
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+        <div class="page-header mb-0">
+            <h1 class="page-title">Reviziya №{{ revision.revision_number }}</h1>
+            <p class="page-subtitle">
+                {{ revision.created_at|date:"d.m.Y H:i" }} | {{ revision.warehouse.name }}
+            </p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            {% if revision.status == 'pending' %}
+            <a href="{% url 'admin_revision_start' revision.pk %}" class="btn btn-success-custom">
+                <i class="bi bi-play-fill me-2"></i>Boshlash
+            </a>
+            {% elif revision.status == 'in_progress' %}
+            <a href="{% url 'admin_revision_complete' revision.pk %}" class="btn btn-primary-custom">
+                <i class="bi bi-check-lg me-2"></i>Tugatish
+            </a>
+            {% else %}
+            <a href="{% url 'admin_revision_results' revision.pk %}" class="btn btn-primary-custom">
+                <i class="bi bi-bar-chart me-2"></i>Natijalar
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Status -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-label mb-2">Status</div>
+                {% if revision.status == 'pending' %}
+                <span class="badge-status badge-pending" style="font-size: 14px;">
+                    <i class="bi bi-clock"></i> Kutilmoqda
+                </span>
+                {% elif revision.status == 'in_progress' %}
+                <span class="badge-status badge-progress" style="font-size: 14px;">
+                    <i class="bi bi-arrow-repeat"></i> Jarayonda
+                </span>
+                {% else %}
+                <span class="badge-status badge-completed" style="font-size: 14px;">
+                    <i class="bi bi-check"></i> Tugallangan
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-label mb-2">Revizorlar</div>
+                <div class="stat-value">{{ assignments.count }}</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-label mb-2">Kiritilgan tovarlar</div>
+                <div class="stat-value">{{ items_count }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revizors -->
+    <div class="card-custom mb-4">
+        <div class="card-header">
+            <i class="bi bi-people me-2"></i>Tayinlangan revizorlar
+        </div>
+        <div class="card-body p-0">
+            <table class="table-custom">
+                <thead>
+                    <tr>
+                        <th>Revizor</th>
+                        <th>Status</th>
+                        <th>Kiritilgan</th>
+                        <th>Tayinlangan</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for assignment in assignments %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div style="width: 32px; height: 32px; background: var(--bg-hover); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600;">
+                                    {{ assignment.revizor.full_name|slice:":1"|upper }}
+                                </div>
+                                <span>{{ assignment.revizor.full_name }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if assignment.status == 'assigned' %}
+                            <span class="badge-status badge-pending">Tayinlangan</span>
+                            {% elif assignment.status == 'working' %}
+                            <span class="badge-status badge-progress">Ishlayapti</span>
+                            {% else %}
+                            <span class="badge-status badge-completed">Tugatdi</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ assignment.revizor.revision_items.filter.count }} ta</td>
+                        <td class="text-secondary">{{ assignment.assigned_at|date:"d.m.Y H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Recent items -->
+    {% if items %}
+    <div class="card-custom">
+        <div class="card-header">
+            <i class="bi bi-list-ul me-2"></i>Oxirgi kiritilgan tovarlar
+        </div>
+        <div class="card-body p-0">
+            <table class="table-custom">
+                <thead>
+                    <tr>
+                        <th>Tovar</th>
+                        <th>Seriya</th>
+                        <th>Srok</th>
+                        <th>Soni</th>
+                        <th>Revizor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.product.name|truncatechars:40 }}</td>
+                        <td><code style="color: var(--text-secondary);">{{ item.series|default:"-" }}</code></td>
+                        <td>{{ item.expiry_date|date:"d.m.Y"|default:"-" }}</td>
+                        <td><strong>{{ item.quantity }}</strong></td>
+                        <td class="text-secondary">{{ item.revizor.full_name }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

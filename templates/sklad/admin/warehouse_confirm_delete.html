@@ -1,0 +1,35 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}O'chirish | Sklad Reviziya{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="row justify-content-center">
+        <div class="col-lg-5">
+            <div class="card-custom">
+                <div class="card-body text-center py-5">
+                    <div class="mb-4">
+                        <i class="bi bi-exclamation-triangle" style="font-size: 48px; color: var(--danger);"></i>
+                    </div>
+                    <h4 class="mb-3">Omborni o'chirmoqchimisiz?</h4>
+                    <p class="text-secondary mb-4">
+                        <strong>{{ warehouse.name }}</strong> ombori va undagi barcha reviziyalar o'chiriladi. Bu amalni qaytarib bo'lmaydi.
+                    </p>
+
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-flex justify-content-center gap-2">
+                            <a href="{% url 'admin_warehouse_detail' warehouse.pk %}" class="btn btn-outline-custom">
+                                Bekor qilish
+                            </a>
+                            <button type="submit" class="btn btn-danger-custom">
+                                <i class="bi bi-trash me-2"></i>Ha, o'chirish
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

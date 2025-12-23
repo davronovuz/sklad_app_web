@@ -1,0 +1,88 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}Nomenklatura | Sklad Reviziya{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="page-header mb-0">
+            <h1 class="page-title">Nomenklatura</h1>
+            <p class="page-subtitle">Tovarlar bazasi (barcha omborlar uchun umumiy)</p>
+        </div>
+        <a href="{% url 'admin_products_upload' %}" class="btn btn-primary-custom">
+            <i class="bi bi-upload me-2"></i>Yuklash
+        </a>
+    </div>
+
+    <!-- Products table -->
+    <div class="card-custom">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-archive me-2"></i>Tovarlar</span>
+            <span class="badge bg-secondary">{{ products.paginator.count }}</span>
+        </div>
+        <div class="card-body p-0">
+            {% if products %}
+            <table class="table-custom">
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">Kod</th>
+                        <th>Tovar nomi</th>
+                        <th>Ishlab chiqaruvchi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    <tr>
+                        <td><code style="color: var(--text-secondary);">{{ product.code }}</code></td>
+                        <td>{{ product.name }}</td>
+                        <td class="text-secondary">{{ product.manufacturer|default:"-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Pagination -->
+            {% if products.has_other_pages %}
+            <div class="d-flex justify-content-center py-3 border-top" style="border-color: var(--border-color) !important;">
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        {% if products.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link bg-transparent border-secondary text-white" href="?page={{ products.previous_page_number }}">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        <li class="page-item disabled">
+                            <span class="page-link bg-transparent border-secondary text-secondary">
+                                {{ products.number }} / {{ products.paginator.num_pages }}
+                            </span>
+                        </li>
+
+                        {% if products.has_next %}
+                        <li class="page-item">
+                            <a class="page-link bg-transparent border-secondary text-white" href="?page={{ products.next_page_number }}">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="empty-state">
+                <i class="bi bi-archive"></i>
+                <h5>Tovarlar yo'q</h5>
+                <p>CSV yoki JSON fayldan nomenklatura yuklang</p>
+                <a href="{% url 'admin_products_upload' %}" class="btn btn-primary-custom mt-3">
+                    <i class="bi bi-upload me-2"></i>Yuklash
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

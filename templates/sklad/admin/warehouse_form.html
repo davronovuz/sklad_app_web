@@ -1,0 +1,54 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}{% if warehouse %}Tahrirlash{% else %}Yangi ombor{% endif %} | Sklad Reviziya{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb" style="font-size: 14px;">
+            <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}" class="text-secondary">Omborlar</a></li>
+            <li class="breadcrumb-item active text-white">{% if warehouse %}Tahrirlash{% else %}Yangi ombor{% endif %}</li>
+        </ol>
+    </nav>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-6">
+            <div class="card-custom">
+                <div class="card-header">
+                    <i class="bi bi-{% if warehouse %}pencil{% else %}plus-lg{% endif %} me-2"></i>
+                    {% if warehouse %}Omborni tahrirlash{% else %}Yangi ombor yaratish{% endif %}
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-4">
+                            <label class="form-label">Ombor nomi <span class="text-danger">*</span></label>
+                            <input type="text" name="name" class="form-control"
+                                   value="{{ warehouse.name|default:'' }}"
+                                   placeholder="Masalan: Asosiy ombor" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Manzil</label>
+                            <textarea name="address" class="form-control" rows="3"
+                                      placeholder="Ombor manzili (ixtiyoriy)">{{ warehouse.address|default:'' }}</textarea>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary-custom">
+                                <i class="bi bi-check-lg me-2"></i>
+                                {% if warehouse %}Saqlash{% else %}Yaratish{% endif %}
+                            </button>
+                            <a href="{% if warehouse %}{% url 'admin_warehouse_detail' warehouse.pk %}{% else %}{% url 'admin_dashboard' %}{% endif %}" class="btn btn-outline-custom">
+                                Bekor qilish
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

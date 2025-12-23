@@ -1,0 +1,63 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}Yangi revizor | Sklad Reviziya{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb" style="font-size: 14px;">
+            <li class="breadcrumb-item"><a href="{% url 'admin_revizors' %}" class="text-secondary">Revizorlar</a></li>
+            <li class="breadcrumb-item active text-white">Yangi revizor</li>
+        </ol>
+    </nav>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-5">
+            <div class="card-custom">
+                <div class="card-header">
+                    <i class="bi bi-person-plus me-2"></i>Yangi revizor yaratish
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-4">
+                            <label class="form-label">To'liq ism <span class="text-danger">*</span></label>
+                            <input type="text" name="full_name" class="form-control"
+                                   placeholder="Masalan: Aliyev Vali" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Login <span class="text-danger">*</span></label>
+                            <input type="text" name="username" class="form-control"
+                                   placeholder="Masalan: revizor1" required>
+                            <div class="form-text">Faqat harflar va raqamlar</div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Parol <span class="text-danger">*</span></label>
+                            <input type="password" name="password" class="form-control"
+                                   placeholder="Parol kiriting" required>
+                        </div>
+
+                        <div class="alert alert-custom alert-info mb-4">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Login va parolni revisorga yetkazing
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary-custom">
+                                <i class="bi bi-check-lg me-2"></i>Yaratish
+                            </button>
+                            <a href="{% url 'admin_revizors' %}" class="btn btn-outline-custom">
+                                Bekor qilish
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

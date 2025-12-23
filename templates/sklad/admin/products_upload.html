@@ -1,0 +1,51 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}Nomenklatura yuklash | Sklad Reviziya{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb" style="font-size: 14px;">
+            <li class="breadcrumb-item"><a href="{% url 'admin_products' %}" class="text-secondary">Nomenklatura</a></li>
+            <li class="breadcrumb-item active text-white">Yuklash</li>
+        </ol>
+    </nav>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-6">
+            <div class="card-custom">
+                <div class="card-header">
+                    <i class="bi bi-upload me-2"></i>Nomenklatura yuklash
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+
+                        <div class="mb-4">
+                            <label class="form-label">Fayl tanlang <span class="text-danger">*</span></label>
+                            <input type="file" name="file" class="form-control" accept=".csv,.json" required>
+                            <div class="form-text">CSV yoki JSON formatida</div>
+                        </div>
+
+                        <div class="alert alert-custom alert-info mb-4">
+                            <strong><i class="bi bi-info-circle me-2"></i>CSV formati:</strong><br>
+                            <code style="font-size: 12px;">code;name;manufacturer</code><br>
+                            <small class="text-secondary">Yoki: kod, nom, ishlab_chiqaruvchi, нумерация, товар номи, ишлаб чикарувчи</small>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary-custom">
+                                <i class="bi bi-upload me-2"></i>Yuklash
+                            </button>
+                            <a href="{% url 'admin_products' %}" class="btn btn-outline-custom">
+                                Bekor qilish
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,260 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}Obzor revizii | Sklad Reviziya{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+        <div class="page-header mb-0">
+            <h1 class="page-title">Obzor revizii</h1>
+            <p class="page-subtitle">
+                Reviziya №{{ revision.revision_number }} | {{ revision.warehouse.name }}
+            </p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'revizor_export' revision.pk %}" class="btn btn-outline-custom">
+                <i class="bi bi-download me-2"></i>Excel
+            </a>
+            {% if assignment.status != 'completed' %}
+            <a href="{% url 'revizor_work' assignment.pk %}" class="btn btn-outline-custom">
+                <i class="bi bi-arrow-left me-2"></i>Orqaga
+            </a>
+            <button type="button" class="btn btn-success-custom" data-bs-toggle="modal" data-bs-target="#completeModal">
+                <i class="bi bi-check-lg me-2"></i>Zavershit
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-6">
+            <div class="stat-card">
+                <div class="stat-value">{{ total_items }}</div>
+                <div class="stat-label">Jami pozitsiyalar</div>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="stat-card">
+                <div class="stat-value">{{ total_quantity }}</div>
+                <div class="stat-label">Jami miqdor</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Items table -->
+    <div class="card-custom">
+        <div class="card-header">
+            <i class="bi bi-list-ul me-2"></i>Kiritilgan tovarlar
+        </div>
+        <div class="card-body p-0">
+            {% if items %}
+            <div class="table-responsive">
+                <table class="table-custom">
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>Tovar nomi</th>
+                            <th>Ishlab chiqaruvchi</th>
+                            <th>Seriya</th>
+                            <th>Srok</th>
+                            <th class="text-center">Soni</th>
+                            {% if assignment.status != 'completed' %}
+                            <th class="text-end">Amallar</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody id="itemsTable">
+                        {% for item in items %}
+                        <tr id="row-{{ item.pk }}">
+                            <td class="text-secondary">{{ forloop.counter }}</td>
+                            <td>{{ item.product.name|truncatechars:35 }}</td>
+                            <td class="text-secondary">{{ item.product.manufacturer|default:"-"|truncatechars:20 }}</td>
+                            <td><code style="color: var(--text-secondary);">{{ item.series|default:"-" }}</code></td>
+                            <td>{{ item.expiry_date|date:"d.m.Y"|default:"-" }}</td>
+                            <td class="text-center">
+                                {% if assignment.status != 'completed' %}
+                                <input type="number"
+                                       class="form-control form-control-sm text-center quantity-input"
+                                       style="width: 80px; display: inline-block;"
+                                       value="{{ item.quantity }}"
+                                       min="0.01"
+                                       step="0.01"
+                                       data-id="{{ item.pk }}"
+                                       data-original="{{ item.quantity }}">
+                                {% else %}
+                                <strong>{{ item.quantity }}</strong>
+                                {% endif %}
+                            </td>
+                            {% if assignment.status != 'completed' %}
+                            <td class="text-end">
+                                <button class="btn btn-ghost btn-sm text-danger delete-btn" data-id="{{ item.pk }}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="bi bi-inbox"></i>
+                <h5>Tovarlar yo'q</h5>
+                <p>Hali birorta tovar kiritilmagan</p>
+                {% if assignment.status != 'completed' %}
+                <a href="{% url 'revizor_work' assignment.pk %}" class="btn btn-primary-custom mt-3">
+                    <i class="bi bi-plus-lg me-2"></i>Tovar kiritish
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Complete Confirmation Modal -->
+<div class="modal fade" id="completeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center py-5">
+                <div class="mb-4">
+                    <i class="bi bi-question-circle" style="font-size: 48px; color: var(--warning);"></i>
+                </div>
+                <h4 class="mb-3">Reviziyani tugatmoqchimisiz?</h4>
+                <p class="text-secondary mb-4">
+                    Bu amalni bajarganingizdan so'ng ma'lumotlarni o'zgartira olmaysiz.
+                </p>
+                <div class="d-flex justify-content-center gap-2">
+                    <button type="button" class="btn btn-outline-custom" data-bs-dismiss="modal">
+                        Yo'q, davom etaman
+                    </button>
+                    <form method="post" action="{% url 'revizor_complete' assignment.pk %}" style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-success-custom">
+                            <i class="bi bi-check-lg me-2"></i>Ha, tugatish
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-body text-center py-4">
+                <div class="mb-3">
+                    <i class="bi bi-trash" style="font-size: 36px; color: var(--danger);"></i>
+                </div>
+                <h5 class="mb-3">O'chirishni tasdiqlang</h5>
+                <div class="d-flex justify-content-center gap-2">
+                    <button type="button" class="btn btn-outline-custom btn-sm" data-bs-dismiss="modal">
+                        Bekor
+                    </button>
+                    <button type="button" class="btn btn-danger-custom btn-sm" id="confirmDeleteBtn">
+                        O'chirish
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrfToken = '{{ csrf_token }}';
+let deleteItemId = null;
+const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+
+// Update quantity on change
+document.querySelectorAll('.quantity-input').forEach(input => {
+    input.addEventListener('change', function() {
+        const id = this.dataset.id;
+        const quantity = parseFloat(this.value);
+        const original = parseFloat(this.dataset.original);
+
+        if (quantity <= 0) {
+            this.value = original;
+            alert('Miqdor 0 dan katta bo\'lishi kerak!');
+            return;
+        }
+
+        fetch(`/api/items/${id}/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ quantity: quantity })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                this.dataset.original = data.quantity;
+                showToast('Saqlandi!', 'success');
+            } else {
+                this.value = original;
+                alert(data.error || 'Xatolik!');
+            }
+        })
+        .catch(err => {
+            this.value = original;
+            alert('Xatolik: ' + err.message);
+        });
+    });
+});
+
+// Delete button click
+document.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        deleteItemId = this.dataset.id;
+        deleteModal.show();
+    });
+});
+
+// Confirm delete
+document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+    if (!deleteItemId) return;
+
+    fetch(`/api/items/${deleteItemId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById(`row-${deleteItemId}`).remove();
+            deleteModal.hide();
+            showToast('O\'chirildi!', 'success');
+        } else {
+            alert(data.error || 'Xatolik!');
+        }
+    })
+    .catch(err => {
+        alert('Xatolik: ' + err.message);
+    });
+});
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-custom alert-${type} position-fixed fade-in`;
+    toast.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 250px;';
+    toast.innerHTML = `<i class="bi bi-check-circle me-2"></i>${message}`;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 500);
+    }, 2000);
+}
+</script>
+{% endblock %}

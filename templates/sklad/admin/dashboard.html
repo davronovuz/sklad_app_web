@@ -1,0 +1,108 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}Boshqaruv paneli | Sklad Reviziya{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="page-header mb-0">
+            <h1 class="page-title">Boshqaruv paneli</h1>
+            <p class="page-subtitle">Omborlar va reviziyalarni boshqaring</p>
+        </div>
+        <a href="{% url 'admin_warehouse_create' %}" class="btn btn-primary-custom">
+            <i class="bi bi-plus-lg me-2"></i>Yangi ombor
+        </a>
+    </div>
+
+    <!-- Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="bi bi-building"></i>
+                </div>
+                <div class="stat-value">{{ total_warehouses }}</div>
+                <div class="stat-label">Omborlar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="bi bi-people"></i>
+                </div>
+                <div class="stat-value">{{ total_revizors }}</div>
+                <div class="stat-label">Revizorlar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="bi bi-clipboard-check"></i>
+                </div>
+                <div class="stat-value">{{ active_revisions|default:0 }}</div>
+                <div class="stat-label">Faol reviziyalar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="bi bi-archive"></i>
+                </div>
+                <div class="stat-value">{{ total_products|default:0 }}</div>
+                <div class="stat-label">Tovarlar</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Warehouses -->
+    <div class="card-custom">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-building me-2"></i>Omborlar</span>
+            <span class="badge bg-secondary">{{ warehouses.count }}</span>
+        </div>
+        <div class="card-body p-0">
+            {% if warehouses %}
+            <div class="row g-3 p-3">
+                {% for warehouse in warehouses %}
+                <div class="col-md-6 col-lg-4">
+                    <a href="{% url 'admin_warehouse_detail' warehouse.pk %}" class="warehouse-card">
+                        <div class="icon">
+                            <i class="bi bi-building"></i>
+                        </div>
+                        <h5>{{ warehouse.name }}</h5>
+                        <p>
+                            <i class="bi bi-clipboard me-1"></i>{{ warehouse.revisions.count }} ta reviziya
+                            {% if warehouse.address %}
+                            <br><i class="bi bi-geo-alt me-1"></i>{{ warehouse.address|truncatechars:30 }}
+                            {% endif %}
+                        </p>
+                    </a>
+                </div>
+                {% endfor %}
+
+                <!-- Add new card -->
+                <div class="col-md-6 col-lg-4">
+                    <a href="{% url 'admin_warehouse_create' %}" class="warehouse-card" style="border-style: dashed; opacity: 0.7;">
+                        <div class="icon" style="border-style: dashed;">
+                            <i class="bi bi-plus-lg"></i>
+                        </div>
+                        <h5>Yangi ombor</h5>
+                        <p>Yangi ombor qo'shish</p>
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="bi bi-building"></i>
+                <h5>Omborlar yo'q</h5>
+                <p>Birinchi omboringizni yarating</p>
+                <a href="{% url 'admin_warehouse_create' %}" class="btn btn-primary-custom mt-3">
+                    <i class="bi bi-plus-lg me-2"></i>Ombor yaratish
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
