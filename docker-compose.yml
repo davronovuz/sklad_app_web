@@ -1,4 +1,4 @@
-
+version: '3.8'
 
 services:
   # 1. Django Application
@@ -11,9 +11,11 @@ services:
       - media_volume:/app/media
       - ./db.sqlite3:/app/db.sqlite3
     environment:
-      - DEBUG=False  # Productionda False bo'lishi kerak!
+      - DEBUG=False
       - SECRET_KEY=django-insecure-ebbz@ipv_0xexs7=k=)f9uu0gw4aaw3w@-7orvmlc#eubjo+7c
       - ALLOWED_HOSTS=bekendchi.uz,www.bekendchi.uz,89.116.27.54
+      # HTTPS uchun bu juda muhim, bo'lmasa Admin panelga kirolmaysiz:
+      - CSRF_TRUSTED_ORIGINS=https://bekendchi.uz,https://www.bekendchi.uz
     command: >
       sh -c "python manage.py collectstatic --noinput &&
              python manage.py migrate &&
@@ -25,19 +27,19 @@ services:
     container_name: sklad_nginx
     restart: always
     ports:
-      - "80:80"   # HTTP uchun
-      - "443:443" # HTTPS (SSL) uchun
+      - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - static_volume:/app/staticfiles:ro
       - media_volume:/app/media:ro
-      # SSL sertifikatlarni o'qish uchun:
-      - certbot-conf:/etc/letsencrypt
-      - certbot-www:/var/www/certbot
+      # --- ASOSIY O'ZGARISH SHU YERDA ---
+      # Biz yaratgan papkani Nginx ichiga ulaymiz:
+      - ./nginx/certs:/etc/nginx/certs
     depends_on:
       - web
 
-  # 3. Certbot (Sertifikatni yangilab turuvchi)
+  # Certbot (hozircha shart emas, lekin keyinchalik yangilash uchun turaversin)
   certbot:
     image: certbot/certbot
     container_name: sklad_certbot
@@ -48,5 +50,5 @@ services:
 volumes:
   static_volume:
   media_volume:
-  certbot-conf: # Sertifikatlar shu yerda saqlanadi
-  certbot-www:  # Tekshiruv fayllari shu yerda
+  certbot-conf:
+  certbot-www:
