@@ -1,42 +1,52 @@
-version: '3.8'
+
 
 services:
-  # Django Application
+  # 1. Django Application
   web:
     build: .
     container_name: sklad_web
     restart: always
     volumes:
-      # Statik va Media fayllar uchun
       - static_volume:/app/staticfiles
       - media_volume:/app/media
-      # MUHIM: SQLite bazasi o'chib ketmasligi uchun uni server bilan bog'laymiz
-      # Agar loyihangizda db.sqlite3 fayli bo'lmasa, uni bo'sh holatda yaratib oling
       - ./db.sqlite3:/app/db.sqlite3
     environment:
-      # Faqat kerakli bo'lsa qoldiring, lekin settings.py da DEBUG=True qattiq yozilgan.
-      # Settings.py bu yerdagi o'zgaruvchilarni o'qimaydi, lekin xavfsizlik uchun yozib qo'ydim.
-      - DEBUG=True
+      - DEBUG=False  # Productionda False bo'lishi kerak!
       - SECRET_KEY=django-insecure-ebbz@ipv_0xexs7=k=)f9uu0gw4aaw3w@-7orvmlc#eubjo+7c
-      - ALLOWED_HOSTS=*
+      - ALLOWED_HOSTS=bekendchi.uz,www.bekendchi.uz,89.116.27.54
     command: >
       sh -c "python manage.py collectstatic --noinput &&
              python manage.py migrate &&
-             gunicorn --bind 0.0.0.0:8000 --workers 1 --threads 4 config.wsgi:application"
-  # Nginx Reverse Proxy
+             gunicorn --bind 0.0.0.0:8000 --workers 3 config.wsgi:application"
+
+  # 2. Nginx (HTTPS va Proxy)
   nginx:
     image: nginx:alpine
     container_name: sklad_nginx
     restart: always
     ports:
-      - "80:80"
+      - "80:80"   # HTTP uchun
+      - "443:443" # HTTPS (SSL) uchun
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - static_volume:/app/staticfiles:ro
       - media_volume:/app/media:ro
+      # SSL sertifikatlarni o'qish uchun:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
     depends_on:
       - web
+
+  # 3. Certbot (Sertifikatni yangilab turuvchi)
+  certbot:
+    image: certbot/certbot
+    container_name: sklad_certbot
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
 
 volumes:
   static_volume:
   media_volume:
+  certbot-conf: # Sertifikatlar shu yerda saqlanadi
+  certbot-www:  # Tekshiruv fayllari shu yerda
