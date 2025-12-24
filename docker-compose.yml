@@ -11,7 +11,7 @@ services:
       - media_volume:/app/media
       - ./db.sqlite3:/app/db.sqlite3
     environment:
-      - DEBUG=False
+      - DEBUG=True
       - SECRET_KEY=django-insecure-ebbz@ipv_0xexs7=k=)f9uu0gw4aaw3w@-7orvmlc#eubjo+7c
       - ALLOWED_HOSTS=bekendchi.uz,www.bekendchi.uz,89.116.27.54
       # HTTPS uchun bu juda muhim, bo'lmasa Admin panelga kirolmaysiz:
