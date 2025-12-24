@@ -710,28 +710,60 @@ def revizor_work(request, assignment_pk):
     return render(request, 'sklad/revizor/work.html', context)
 
 
+
 @login_required
 def revizor_search_products(request):
-    """Tovar qidirish (AJAX)"""
+    """Tovar qidirish (AJAX) - yaxshilangan"""
     if request.user.is_admin:
         return JsonResponse({'error': 'Forbidden'}, status=403)
 
     query = request.GET.get('q', '').strip()
 
-    if len(query) < 2:
+    if len(query) < 1:
         return JsonResponse({'products': []})
 
-    products = Product.objects.filter(
-        Q(name__icontains=query) |
-        Q(code__icontains=query) |
-        Q(manufacturer__icontains=query)
-    )[:20]
+    # Qidiruv so'zlarini ajratish
+    words = query.lower().split()
+
+    # Boshlang'ich queryset
+    products = Product.objects.all()
+
+    # Har bir so'z uchun filter
+    for word in words:
+        products = products.filter(
+            Q(name__icontains=word) |
+            Q(code__icontains=word) |
+            Q(manufacturer__icontains=word)
+        )
+
+    # Relevantlik bo'yicha saralash:
+    # 1. Nom boshidan mos kelsa - birinchi
+    # 2. Nom ichida mos kelsa - keyin
+    # 3. Kod yoki manufacturer - oxirida
+
+    from django.db.models import Case, When, Value, IntegerField
+
+    products = products.annotate(
+        relevance=Case(
+            # Nom aynan shu so'z bilan boshlansa
+            When(name__istartswith=query, then=Value(1)),
+            # Nom ichida birinchi so'z bilan boshlansa
+            When(name__istartswith=words[0] if words else '', then=Value(2)),
+            # Nom ichida mos kelsa
+            When(name__icontains=query, then=Value(3)),
+            # Kod mos kelsa
+            When(code__icontains=query, then=Value(4)),
+            # Boshqa
+            default=Value(5),
+            output_field=IntegerField(),
+        )
+    ).order_by('relevance', 'name')[:30]
 
     data = [{
         'id': p.id,
         'code': p.code,
         'name': p.name,
-        'manufacturer': p.manufacturer,
+        'manufacturer': p.manufacturer or '',
     } for p in products]
 
     return JsonResponse({'products': data})
