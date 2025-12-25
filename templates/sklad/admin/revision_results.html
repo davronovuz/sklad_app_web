@@ -1,185 +1,418 @@
 {% extends 'sklad/base.html' %}
 
-{% block title %}Natijalar | Reviziya №{{ revision.revision_number }}{% endblock %}
+{% block title %}Natijalar - Reviziya №{{ revision.revision_number }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Excel shaklidagi jadval */
+    .results-table-wrapper {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        overflow: hidden;
+        margin-bottom: 2rem;
+    }
+
+    .results-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+    .results-table th {
+        background: #f8fafc;
+        padding: 12px 8px;
+        text-align: left;
+        font-weight: 600;
+        color: #475569;
+        border-bottom: 2px solid #e2e8f0;
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .results-table th.col-num { width: 50px; text-align: center; }
+    .results-table th.col-name { min-width: 250px; }
+    .results-table th.col-manufacturer { min-width: 150px; }
+    .results-table th.col-series { width: 100px; }
+    .results-table th.col-expiry { width: 100px; }
+    .results-table th.col-qty { width: 100px; text-align: right; }
+    .results-table th.col-result { width: 80px; text-align: center; }
+    .results-table th.col-revizor { width: 120px; }
+
+    .results-table td {
+        padding: 10px 8px;
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: middle;
+    }
+
+    .results-table tbody tr:hover {
+        background: #f8fafc;
+    }
+
+    /* Rang kodlari */
+    .results-table tr.row-correct {
+        background: #f0fdf4;
+    }
+    .results-table tr.row-shortage {
+        background: #fef2f2;
+    }
+    .results-table tr.row-excess {
+        background: #fefce8;
+    }
+
+    .results-table tr.row-correct:hover { background: #dcfce7; }
+    .results-table tr.row-shortage:hover { background: #fee2e2; }
+    .results-table tr.row-excess:hover { background: #fef9c3; }
+
+    /* Raqamlar */
+    .col-num-cell {
+        text-align: center;
+        color: #94a3b8;
+        font-weight: 500;
+    }
+
+    .col-qty-cell {
+        text-align: right;
+        font-family: 'Monaco', 'Consolas', monospace;
+        font-weight: 500;
+    }
+
+    /* Natija ustunlari */
+    .result-correct {
+        color: #16a34a;
+        font-weight: 600;
+        text-align: center;
+    }
+
+    .result-plus {
+        color: #f59e0b;
+        font-weight: 700;
+        text-align: center;
+        font-size: 14px;
+    }
+
+    .result-minus {
+        color: #dc2626;
+        font-weight: 700;
+        text-align: center;
+        font-size: 14px;
+    }
+
+    /* Statistika kartalar */
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.25rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border-left: 4px solid;
+    }
+
+    .stat-card.total { border-color: #6366f1; }
+    .stat-card.correct { border-color: #10b981; }
+    .stat-card.shortage { border-color: #ef4444; }
+    .stat-card.excess { border-color: #f59e0b; }
+
+    .stat-card-value {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-card.total .stat-card-value { color: #6366f1; }
+    .stat-card.correct .stat-card-value { color: #10b981; }
+    .stat-card.shortage .stat-card-value { color: #ef4444; }
+    .stat-card.excess .stat-card-value { color: #f59e0b; }
+
+    .stat-card-label {
+        color: #64748b;
+        font-size: 13px;
+    }
+
+    /* Filter va export */
+    .toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .filter-group {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .filter-btn {
+        padding: 0.5rem 1rem;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        border-radius: 8px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .filter-btn:hover {
+        border-color: #6366f1;
+        color: #6366f1;
+    }
+
+    .filter-btn.active {
+        background: #6366f1;
+        color: #fff;
+        border-color: #6366f1;
+    }
+
+    .export-group {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-export {
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.2s;
+    }
+
+    .btn-export-csv {
+        background: #10b981;
+        color: #fff;
+    }
+
+    .btn-export-csv:hover {
+        background: #059669;
+    }
+
+    /* Hisobda yo'q tovarlar */
+    .unaccounted-section {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border-left: 4px solid #f59e0b;
+    }
+
+    .unaccounted-title {
+        font-weight: 600;
+        color: #f59e0b;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .stats-row {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .results-table-wrapper {
+            overflow-x: auto;
+        }
+
+        .toolbar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+    }
+
+    /* Search */
+    .search-input {
+        padding: 0.5rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        width: 250px;
+        font-size: 13px;
+    }
+
+    .search-input:focus {
+        outline: none;
+        border-color: #6366f1;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="fade-in">
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-4">
-        <ol class="breadcrumb" style="font-size: 14px;">
-            <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}" class="text-secondary">Omborlar</a></li>
-            <li class="breadcrumb-item"><a href="{% url 'admin_warehouse_detail' revision.warehouse.pk %}" class="text-secondary">{{ revision.warehouse.name }}</a></li>
-            <li class="breadcrumb-item active text-white">Natijalar</li>
-        </ol>
-    </nav>
-
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
-        <div class="page-header mb-0">
-            <h1 class="page-title">Reviziya №{{ revision.revision_number }} natijalari</h1>
-            <p class="page-subtitle">{{ revision.created_at|date:"d.m.Y" }} | {{ revision.warehouse.name }}</p>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav class="breadcrumb-nav">
+                <a href="{% url 'admin_dashboard' %}">Omborlar</a>
+                <span>/</span>
+                <a href="{% url 'admin_warehouse_detail' revision.warehouse.pk %}">{{ revision.warehouse.name }}</a>
+                <span>/</span>
+                <span>Natijalar</span>
+            </nav>
+            <h1 class="page-title">Reviziya №{{ revision.revision_number }} - Natijalar</h1>
+            <p class="page-subtitle">{{ revision.completed_at|date:"d.m.Y H:i" }}</p>
         </div>
-        <div class="d-flex gap-2">
-            <a href="{% url 'admin_revision_export' revision.pk %}" class="btn btn-outline-custom">
-                <i class="bi bi-download me-2"></i>Yuklab olish
+        <a href="{% url 'admin_warehouse_detail' revision.warehouse.pk %}" class="btn btn-outline-custom">
+            <i class="bi bi-arrow-left me-2"></i>Orqaga
+        </a>
+    </div>
+
+    <!-- Statistika -->
+    <div class="stats-row">
+        <div class="stat-card total">
+            <div class="stat-card-value">{{ stats.total }}</div>
+            <div class="stat-card-label">Jami pozitsiyalar</div>
+        </div>
+        <div class="stat-card correct">
+            <div class="stat-card-value">{{ stats.correct }}</div>
+            <div class="stat-card-label">✓ To'g'ri</div>
+        </div>
+        <div class="stat-card shortage">
+            <div class="stat-card-value">{{ stats.shortage }}</div>
+            <div class="stat-card-label">− Kam (Недостача)</div>
+        </div>
+        <div class="stat-card excess">
+            <div class="stat-card-value">{{ stats.excess }}</div>
+            <div class="stat-card-label">+ Ko'p (Излишек)</div>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <div class="filter-group">
+            <a href="?status=" class="filter-btn {% if not status_filter %}active{% endif %}">Hammasi</a>
+            <a href="?status=correct" class="filter-btn {% if status_filter == 'correct' %}active{% endif %}">✓ To'g'ri</a>
+            <a href="?status=shortage" class="filter-btn {% if status_filter == 'shortage' %}active{% endif %}">− Kam</a>
+            <a href="?status=excess" class="filter-btn {% if status_filter == 'excess' %}active{% endif %}">+ Ko'p</a>
+        </div>
+
+        <form method="get" class="d-flex gap-2">
+            <input type="hidden" name="status" value="{{ status_filter }}">
+            <input type="text" name="search" value="{{ search }}" class="search-input" placeholder="Qidirish...">
+            <button type="submit" class="filter-btn">🔍</button>
+        </form>
+
+        <div class="export-group">
+            <a href="{% url 'admin_revision_export' revision.pk %}" class="btn-export btn-export-csv">
+                <i class="bi bi-download"></i> CSV yuklab olish
             </a>
-            <a href="{% url 'admin_unaccounted_export' revision.pk %}" class="btn btn-outline-custom">
-                <i class="bi bi-question-circle me-2"></i>Neuchtennie
-            </a>
         </div>
     </div>
 
-    <!-- Stats -->
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <div class="stat-card">
-                <div class="stat-value">{{ stats.total }}</div>
-                <div class="stat-label">Jami pozitsiyalar</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card" style="border-left: 3px solid var(--success);">
-                <div class="stat-value" style="color: var(--success);">{{ stats.correct }}</div>
-                <div class="stat-label">To'g'ri</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card" style="border-left: 3px solid var(--danger);">
-                <div class="stat-value" style="color: var(--danger);">{{ stats.shortage }}</div>
-                <div class="stat-label">Kam</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card" style="border-left: 3px solid var(--warning);">
-                <div class="stat-value" style="color: var(--warning);">{{ stats.excess }}</div>
-                <div class="stat-label">Ko'p</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Filters -->
-    <div class="card-custom mb-4">
-        <div class="card-body py-3">
-            <form method="get" class="row g-3 align-items-end">
-                <div class="col-md-3">
-                    <label class="form-label">Status bo'yicha</label>
-                    <select name="status" class="form-select" onchange="this.form.submit()">
-                        <option value="">Barchasi</option>
-                        <option value="correct" {% if status_filter == 'correct' %}selected{% endif %}>To'g'ri</option>
-                        <option value="shortage" {% if status_filter == 'shortage' %}selected{% endif %}>Kam</option>
-                        <option value="excess" {% if status_filter == 'excess' %}selected{% endif %}>Ko'p</option>
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Qidirish</label>
-                    <input type="text" name="search" class="form-control"
-                           placeholder="Tovar nomi, kod yoki seriya..."
-                           value="{{ search }}">
-                </div>
-                <div class="col-md-3">
-                    <button type="submit" class="btn btn-outline-custom w-100">
-                        <i class="bi bi-search me-2"></i>Qidirish
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Results table -->
-    <div class="card-custom">
-        <div class="card-header">
-            <i class="bi bi-table me-2"></i>Natijalar
-        </div>
-        <div class="card-body p-0">
-            {% if results %}
-            <div class="table-responsive">
-                <table class="table-custom">
-                    <thead>
-                        <tr>
-                            <th>№</th>
-                            <th>Tovar nomi</th>
-                            <th>Ishlab chiqaruvchi</th>
-                            <th>Seriya</th>
-                            <th>Srok</th>
-                            <th class="text-end">1C</th>
-                            <th class="text-end">Haqiqiy</th>
-                            <th class="text-end">Farq</th>
-                            <th>Natija</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for result in results %}
-                        <tr>
-                            <td class="text-secondary">{{ forloop.counter }}</td>
-                            <td>{{ result.product.name|truncatechars:35 }}</td>
-                            <td class="text-secondary">{{ result.product.manufacturer|truncatechars:20|default:"-" }}</td>
-                            <td><code style="color: var(--text-secondary);">{{ result.series|default:"-" }}</code></td>
-                            <td>{{ result.expiry_date|date:"d.m.Y"|default:"-" }}</td>
-                            <td class="text-end">{{ result.expected_quantity }}</td>
-                            <td class="text-end"><strong>{{ result.actual_quantity }}</strong></td>
-                            <td class="text-end">
-                                {% if result.difference > 0 %}
-                                <span style="color: var(--warning);">+{{ result.difference }}</span>
-                                {% elif result.difference < 0 %}
-                                <span style="color: var(--danger);">{{ result.difference }}</span>
-                                {% else %}
-                                <span class="text-secondary">0</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if result.status == 'correct' %}
-                                <span class="badge-status badge-correct">To'g'ri</span>
-                                {% elif result.status == 'shortage' %}
-                                <span class="badge-status badge-shortage">Kam</span>
-                                {% else %}
-                                <span class="badge-status badge-excess">Ko'p</span>
-                                {% endif %}
-                            </td>
-                        </tr>
+    <!-- Natijalar jadvali -->
+    <div class="results-table-wrapper">
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th class="col-num">№</th>
+                    <th class="col-name">Наименование</th>
+                    <th class="col-manufacturer">Производитель</th>
+                    <th class="col-series">Серия</th>
+                    <th class="col-expiry">Годность</th>
+                    <th class="col-qty">Количество</th>
+                    <th class="col-result">Тугри</th>
+                    <th class="col-result">Плюс</th>
+                    <th class="col-result">Минус</th>
+                    <th class="col-revizor">Ревизор</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for result in results %}
+                <tr class="row-{{ result.status }}">
+                    <td class="col-num-cell">{{ forloop.counter }}</td>
+                    <td>{{ result.product.name }}</td>
+                    <td>{{ result.product.manufacturer|default:"-" }}</td>
+                    <td>{{ result.series|default:"-" }}</td>
+                    <td>{{ result.expiry_date|date:"d.m.Y"|default:"-" }}</td>
+                    <td class="col-qty-cell">{{ result.expected_quantity|floatformat:0 }}</td>
+                    <td class="result-correct">
+                        {% if result.status == 'correct' %}
+                            ✓
+                        {% endif %}
+                    </td>
+                    <td class="result-plus">
+                        {% if result.status == 'excess' %}
+                            +{{ result.difference|floatformat:0 }}
+                        {% endif %}
+                    </td>
+                    <td class="result-minus">
+                        {% if result.status == 'shortage' %}
+                            {{ result.difference|floatformat:0 }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% for revizor in result.revizors.all %}
+                            {{ revizor.full_name|default:revizor.username }}{% if not forloop.last %}, {% endif %}
+                        {% empty %}
+                            -
                         {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="empty-state">
-                <i class="bi bi-inbox"></i>
-                <h5>Natijalar yo'q</h5>
-                <p>Filtrni o'zgartiring yoki reviziya tugashini kuting</p>
-            </div>
-            {% endif %}
-        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="text-center py-4 text-muted">
+                        Ma'lumot yo'q
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 
-    <!-- Unaccounted items -->
+    <!-- Hisobda yo'q tovarlar -->
     {% if unaccounted %}
-    <div class="card-custom mt-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-question-circle me-2 text-warning"></i>Hisobda yo'q tovarlar (Neuchtennie)</span>
-            <span class="badge bg-warning text-dark">{{ unaccounted.count }}</span>
+    <div class="unaccounted-section">
+        <div class="unaccounted-title">
+            <i class="bi bi-exclamation-triangle"></i>
+            Hisobda yo'q tovarlar (1C da yo'q, lekin omborda bor) - {{ unaccounted.count }} ta
         </div>
-        <div class="card-body p-0">
-            <table class="table-custom">
+
+        <div class="results-table-wrapper" style="box-shadow: none;">
+            <table class="results-table">
                 <thead>
                     <tr>
-                        <th>Tovar</th>
-                        <th>Seriya</th>
-                        <th>Srok</th>
-                        <th>Soni</th>
-                        <th>Revizor</th>
+                        <th class="col-num">№</th>
+                        <th class="col-name">Наименование</th>
+                        <th class="col-manufacturer">Производитель</th>
+                        <th class="col-series">Серия</th>
+                        <th class="col-expiry">Годность</th>
+                        <th class="col-qty">Сони</th>
+                        <th class="col-revizor">Ревизор</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for item in unaccounted %}
                     <tr>
-                        <td>{{ item.product.name|truncatechars:40 }}</td>
-                        <td><code style="color: var(--text-secondary);">{{ item.series|default:"-" }}</code></td>
+                        <td class="col-num-cell">{{ forloop.counter }}</td>
+                        <td>{{ item.product.name }}</td>
+                        <td>{{ item.product.manufacturer|default:"-" }}</td>
+                        <td>{{ item.series|default:"-" }}</td>
                         <td>{{ item.expiry_date|date:"d.m.Y"|default:"-" }}</td>
-                        <td><strong>{{ item.quantity }}</strong></td>
-                        <td class="text-secondary">{{ item.revizor.full_name }}</td>
+                        <td class="col-qty-cell">{{ item.quantity|floatformat:0 }}</td>
+                        <td>{{ item.revizor.full_name|default:item.revizor.username }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <div class="mt-3">
+            <a href="{% url 'admin_unaccounted_export' revision.pk %}" class="btn-export btn-export-csv">
+                <i class="bi bi-download"></i> Hisobda yo'qlarni yuklab olish
+            </a>
         </div>
     </div>
     {% endif %}

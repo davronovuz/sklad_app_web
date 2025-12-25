@@ -1003,62 +1003,124 @@ def revizor_export(request, revision_pk):
 
 
 # ==================== HELPER FUNCTIONS ====================
+# ============================================
+# YANGILANGAN calculate_revision_results
+# views.py dagi eskisini shu bilan almashtiring
+# ============================================
 
 def calculate_revision_results(revision):
-    """Reviziya natijalarini hisoblash"""
+    """
+    Reviziya natijalarini hisoblash - TZ bo'yicha
+
+    MUHIM: Revizor partiyalarni ajratmaydi!
+    - 1C da bir tovar bir nechta partiyada bo'lishi mumkin
+    - Revizor umumiy sonni kiritadi
+    - Tizim TOVAR BO'YICHA JAMI solishtiriladi
+    - Farq birinchi partiyaga yoziladi
+    """
 
     # Avvalgi natijalarni tozalash
     RevisionResult.objects.filter(revision=revision).delete()
     UnaccountedItem.objects.filter(revision=revision).delete()
 
-    # 1C dagi tovarlar
-    inventory_items = Inventory.objects.filter(warehouse=revision.warehouse)
+    warehouse = revision.warehouse
 
-    # Revizorlar kiritgan tovarlar
-    revision_items = RevisionItem.objects.filter(revision=revision)
+    # 1. 1C dagi tovarlar - TOVAR BO'YICHA GURUHLAB
+    inventory_by_product = {}
+    inventory_items = Inventory.objects.filter(warehouse=warehouse).select_related('product')
 
-    # Har bir 1C tovar uchun natija
     for inv in inventory_items:
-        actual = revision_items.filter(
-            product=inv.product,
-            series=inv.series,
-            expiry_date=inv.expiry_date
-        ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+        product_id = inv.product_id
+        if product_id not in inventory_by_product:
+            inventory_by_product[product_id] = {
+                'product': inv.product,
+                'total_qty': Decimal('0'),
+                'items': []  # Har bir partiya
+            }
+        inventory_by_product[product_id]['total_qty'] += inv.quantity
+        inventory_by_product[product_id]['items'].append({
+            'series': inv.series,
+            'expiry_date': inv.expiry_date,
+            'quantity': inv.quantity
+        })
 
-        result = RevisionResult.objects.create(
-            revision=revision,
-            product=inv.product,
-            series=inv.series,
-            expiry_date=inv.expiry_date,
-            expected_quantity=inv.quantity,
-            actual_quantity=actual,
-        )
-        result.calculate()
+    # 2. Revizorlar kiritgan tovarlar - TOVAR BO'YICHA JAMI
+    revision_items = RevisionItem.objects.filter(revision=revision).select_related('product', 'revizor')
 
-        # Revizorlarni qo'shish
-        revizor_ids = revision_items.filter(
-            product=inv.product,
-            series=inv.series,
-            expiry_date=inv.expiry_date
-        ).values_list('revizor_id', flat=True).distinct()
-        result.revizors.set(revizor_ids)
+    revizor_by_product = {}
+    revizor_names_by_product = {}
 
-    # Hisobda yo'q tovarlar
     for item in revision_items:
-        exists = inventory_items.filter(
-            product=item.product,
-            series=item.series,
-            expiry_date=item.expiry_date
-        ).exists()
+        product_id = item.product_id
+        if product_id not in revizor_by_product:
+            revizor_by_product[product_id] = Decimal('0')
+            revizor_names_by_product[product_id] = set()
+        revizor_by_product[product_id] += item.quantity
+        revizor_names_by_product[product_id].add(item.revizor)
 
-        if not exists:
-            UnaccountedItem.objects.get_or_create(
+    # 3. Har bir 1C tovar uchun natija yaratish
+    for product_id, inv_data in inventory_by_product.items():
+        product = inv_data['product']
+        expected_total = inv_data['total_qty']  # 1C jami
+        actual_total = revizor_by_product.get(product_id, Decimal('0'))  # Revizor jami
+
+        difference = actual_total - expected_total
+
+        # Status aniqlash
+        if difference == 0:
+            status = 'correct'
+        elif difference < 0:
+            status = 'shortage'
+        else:
+            status = 'excess'
+
+        # Har bir partiya uchun natija yozish
+        # Farq BIRINCHI partiyaga yoziladi (TZ bo'yicha)
+        items = inv_data['items']
+
+        for i, item in enumerate(items):
+            if i == 0:
+                # Birinchi partiyaga farq yoziladi
+                item_difference = difference
+                item_status = status
+            else:
+                # Boshqa partiyalar "to'g'ri" bo'ladi
+                item_difference = Decimal('0')
+                item_status = 'correct'
+
+            result = RevisionResult.objects.create(
                 revision=revision,
-                product=item.product,
-                series=item.series,
-                expiry_date=item.expiry_date,
-                defaults={
-                    'quantity': item.quantity,
-                    'revizor': item.revizor,
-                }
+                product=product,
+                series=item['series'],
+                expiry_date=item['expiry_date'],
+                expected_quantity=item['quantity'],
+                actual_quantity=item['quantity'] + item_difference if i == 0 else item['quantity'],
+                difference=item_difference,
+                status=item_status
             )
+
+            # Revizorlarni qo'shish
+            if product_id in revizor_names_by_product:
+                result.revizors.set(revizor_names_by_product[product_id])
+
+    # 4. Hisobda yo'q tovarlar (1C da yo'q, lekin revizor kiritgan)
+    for product_id, actual_qty in revizor_by_product.items():
+        if product_id not in inventory_by_product:
+            # 1C da yo'q tovar
+            product = Product.objects.get(pk=product_id)
+
+            # Revizor ma'lumotlarini olish
+            items = RevisionItem.objects.filter(
+                revision=revision,
+                product_id=product_id
+            )
+
+            for item in items:
+                UnaccountedItem.objects.create(
+                    revision=revision,
+                    product=product,
+                    series=item.series,
+                    expiry_date=item.expiry_date,
+                    quantity=item.quantity,
+                    revizor=item.revizor
+                )
