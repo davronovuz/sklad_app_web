@@ -710,10 +710,22 @@ def revizor_work(request, assignment_pk):
     return render(request, 'sklad/revizor/work.html', context)
 
 
+"""
+FAQAT SHU FUNKSIYANI ALMASHTIRING
+=================================
+
+views.py dagi eski `revizor_search_products` funksiyasini 
+O'CHIRIB, shu yangi funksiyani qo'ying.
+
+Boshqa hech narsani o'zgartirmang!
+"""
+
 
 @login_required
 def revizor_search_products(request):
-    """Tovar qidirish (AJAX) - yaxshilangan"""
+    """
+    Tovar qidirish (AJAX) - 12,000+ dori uchun optimallashtirilgan
+    """
     if request.user.is_admin:
         return JsonResponse({'error': 'Forbidden'}, status=403)
 
@@ -722,51 +734,89 @@ def revizor_search_products(request):
     if len(query) < 1:
         return JsonResponse({'products': []})
 
-    # Qidiruv so'zlarini ajratish
-    words = query.lower().split()
+    query_lower = query.lower()
+    words = query_lower.split()
+    first_word = words[0] if words else query_lower
 
-    # Boshlang'ich queryset
-    products = Product.objects.all()
+    # 1. Bazadan kattaroq to'plam olish
+    products_qs = Product.objects.filter(
+        Q(name__icontains=first_word) |
+        Q(code__icontains=first_word) |
+        Q(manufacturer__icontains=first_word)
+    )
 
-    # Har bir so'z uchun filter
-    for word in words:
-        products = products.filter(
-            Q(name__icontains=word) |
-            Q(code__icontains=word) |
-            Q(manufacturer__icontains=word)
-        )
+    products_list = list(products_qs.values('id', 'code', 'name', 'manufacturer')[:1000])
 
-    # Relevantlik bo'yicha saralash:
-    # 1. Nom boshidan mos kelsa - birinchi
-    # 2. Nom ichida mos kelsa - keyin
-    # 3. Kod yoki manufacturer - oxirida
+    # 2. Har biriga ball berish
+    scored_products = []
 
-    from django.db.models import Case, When, Value, IntegerField
+    for p in products_list:
+        score = 0
+        name_lower = (p['name'] or '').lower()
+        code_lower = (p['code'] or '').lower()
+        manufacturer_lower = (p['manufacturer'] or '').lower()
 
-    products = products.annotate(
-        relevance=Case(
-            # Nom aynan shu so'z bilan boshlansa
-            When(name__istartswith=query, then=Value(1)),
-            # Nom ichida birinchi so'z bilan boshlansa
-            When(name__istartswith=words[0] if words else '', then=Value(2)),
-            # Nom ichida mos kelsa
-            When(name__icontains=query, then=Value(3)),
-            # Kod mos kelsa
-            When(code__icontains=query, then=Value(4)),
-            # Boshqa
-            default=Value(5),
-            output_field=IntegerField(),
-        )
-    ).order_by('relevance', 'name')[:30]
+        # Kod aniq mos
+        if code_lower == query_lower:
+            score += 1000
+        elif code_lower.startswith(query_lower):
+            score += 200
+        elif query_lower in code_lower:
+            score += 100
 
-    data = [{
-        'id': p.id,
-        'code': p.code,
-        'name': p.name,
-        'manufacturer': p.manufacturer or '',
-    } for p in products]
+        # Nom aniq mos
+        if name_lower == query_lower:
+            score += 900
+        elif name_lower.startswith(query_lower):
+            score += 300
+        elif f' {query_lower}' in f' {name_lower}':
+            score += 150
 
-    return JsonResponse({'products': data})
+        # Har bir so'z uchun
+        words_found = 0
+        for word in words:
+            if word in name_lower:
+                words_found += 1
+                if name_lower.startswith(word):
+                    score += 50
+                elif f' {word}' in name_lower:
+                    score += 30
+                else:
+                    score += 10
+
+            if word in code_lower:
+                words_found += 1
+                score += 20
+
+            if word in manufacturer_lower:
+                words_found += 1
+                score += 5
+
+        # Barcha so'zlar topildi - bonus
+        if len(words) > 1 and words_found >= len(words):
+            score += 100
+
+        if score > 0:
+            scored_products.append({
+                'id': p['id'],
+                'code': p['code'],
+                'name': p['name'],
+                'manufacturer': p['manufacturer'] or '',
+                'score': score
+            })
+
+    # 3. Ball bo'yicha tartiblash
+    scored_products.sort(key=lambda x: (-x['score'], x['name'].lower()))
+
+    # 4. Eng yaxshi 30 tasini qaytarish
+    result = [{
+        'id': p['id'],
+        'code': p['code'],
+        'name': p['name'],
+        'manufacturer': p['manufacturer'],
+    } for p in scored_products[:30]]
+
+    return JsonResponse({'products': result})
 
 
 @login_required
