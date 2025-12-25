@@ -523,8 +523,8 @@
 
                 <div class="form-group">
                     <label>Yaroqlilik muddati <span class="text-danger">*</span></label>
-                    <input type="date" id="modalExpiry" min="2025-01-01" max="2050-12-31">
-                    <small>2025-2050 oralig'ida</small>
+                    <input type="text" id="modalExpiry" placeholder="01.01.2026" maxlength="10">
+                    <small>Format: KK.OO.YYYY (masalan: 01.03.2026)</small>
                 </div>
 
                 <div class="form-group">
@@ -685,17 +685,24 @@ function selectProduct(p) {
 document.getElementById('saveBtn').onclick = function() {
     const productId = document.getElementById('modalProductId').value;
     const series = document.getElementById('modalSeries').value.trim();
-    const expiry = document.getElementById('modalExpiry').value;
+    const expiryInput = document.getElementById('modalExpiry').value.trim();
     const qty = document.getElementById('modalQty').value;
 
-    if (!expiry) {
+    if (!expiryInput) {
         toast('Muddatni kiriting!', true);
+        return;
+    }
+
+    // Sanani parse qilish (DD.MM.YYYY formatidan)
+    const expiry = parseDate(expiryInput);
+    if (!expiry) {
+        toast('Sana formati noto\'g\'ri! (01.03.2026)', true);
         return;
     }
 
     const year = parseInt(expiry.split('-')[0]);
     if (year < 2025 || year > 2050) {
-        toast('Muddat 2025-2050 oralig\'ida bo\'lsin!', true);
+        toast('Yil 2025-2050 oralig\'ida bo\'lsin!', true);
         return;
     }
 
@@ -730,6 +737,44 @@ document.getElementById('saveBtn').onclick = function() {
         }
     });
 };
+
+// Sanani parse qilish (DD.MM.YYYY -> YYYY-MM-DD)
+function parseDate(str) {
+    // Turli formatlarni qo'llab-quvvatlash
+    let day, month, year;
+
+    // DD.MM.YYYY yoki DD/MM/YYYY
+    let match = str.match(/^(\d{1,2})[\.\/](\d{1,2})[\.\/](\d{4})$/);
+    if (match) {
+        day = match[1].padStart(2, '0');
+        month = match[2].padStart(2, '0');
+        year = match[3];
+    }
+    // MM.YYYY (kun yo'q - 01 deb olamiz)
+    else if (match = str.match(/^(\d{1,2})[\.\/](\d{4})$/)) {
+        day = '01';
+        month = match[1].padStart(2, '0');
+        year = match[2];
+    }
+    // YYYY-MM-DD (standart format)
+    else if (match = str.match(/^(\d{4})-(\d{2})-(\d{2})$/)) {
+        year = match[1];
+        month = match[2];
+        day = match[3];
+    }
+    else {
+        return null;
+    }
+
+    // Validatsiya
+    const m = parseInt(month);
+    const d = parseInt(day);
+    if (m < 1 || m > 12 || d < 1 || d > 31) {
+        return null;
+    }
+
+    return `${year}-${month}-${day}`;
+}
 
 // Enter in modal
 document.getElementById('productModal').onkeydown = e => {
