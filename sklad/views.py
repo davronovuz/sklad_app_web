@@ -18,6 +18,43 @@ from .models import (
 )
 
 
+
+# ============ TRANSLITERATSIYA ============
+LATIN_TO_CYRILLIC = {
+    'a': 'а', 'b': 'б', 'v': 'в', 'g': 'г', 'd': 'д',
+    'e': 'е', 'yo': 'ё', 'zh': 'ж', 'z': 'з', 'i': 'и',
+    'y': 'й', 'k': 'к', 'l': 'л', 'm': 'м', 'n': 'н',
+    'o': 'о', 'p': 'п', 'r': 'р', 's': 'с', 't': 'т',
+    'u': 'у', 'f': 'ф', 'h': 'х', 'kh': 'х', 'ts': 'ц',
+    'ch': 'ч', 'sh': 'ш', 'sch': 'щ', 'shch': 'щ',
+    'j': 'дж', 'x': 'кс', 'w': 'в', 'q': 'к', 'c': 'ц',
+}
+
+def transliterate_to_cyrillic(text):
+    text = text.lower()
+    result = ''
+    i = 0
+    while i < len(text):
+        if i + 4 <= len(text) and text[i:i+4] in LATIN_TO_CYRILLIC:
+            result += LATIN_TO_CYRILLIC[text[i:i+4]]
+            i += 4
+        elif i + 3 <= len(text) and text[i:i+3] in LATIN_TO_CYRILLIC:
+            result += LATIN_TO_CYRILLIC[text[i:i+3]]
+            i += 3
+        elif i + 2 <= len(text) and text[i:i+2] in LATIN_TO_CYRILLIC:
+            result += LATIN_TO_CYRILLIC[text[i:i+2]]
+            i += 2
+        elif text[i] in LATIN_TO_CYRILLIC:
+            result += LATIN_TO_CYRILLIC[text[i]]
+            i += 1
+        else:
+            result += text[i]
+            i += 1
+    return result
+
+def is_latin(text):
+    return any(c in 'abcdefghijklmnopqrstuvwxyz' for c in text.lower())
+
 # ==================== AUTH ====================
 
 def login_view(request):
@@ -710,111 +747,30 @@ def revizor_work(request, assignment_pk):
     return render(request, 'sklad/revizor/work.html', context)
 
 
-"""
-FAQAT SHU FUNKSIYANI ALMASHTIRING
-=================================
-
-views.py dagi eski `revizor_search_products` funksiyasini 
-O'CHIRIB, shu yangi funksiyani qo'ying.
-
-Boshqa hech narsani o'zgartirmang!
-"""
-
-
 @login_required
 def revizor_search_products(request):
-    """
-    Tovar qidirish (AJAX) - 12,000+ dori uchun optimallashtirilgan
-    """
-    if request.user.is_admin:
-        return JsonResponse({'error': 'Forbidden'}, status=403)
-
     query = request.GET.get('q', '').strip()
 
     if len(query) < 1:
         return JsonResponse({'products': []})
 
-    query_lower = query.lower()
-    words = query_lower.split()
-    first_word = words[0] if words else query_lower
+    search_queries = [query]
+    if is_latin(query):
+        search_queries.append(transliterate_to_cyrillic(query))
 
-    # 1. Bazadan kattaroq to'plam olish
-    products_qs = Product.objects.filter(
-        Q(name__icontains=first_word) |
-        Q(code__icontains=first_word) |
-        Q(manufacturer__icontains=first_word)
-    )
+    q_filter = Q()
+    for q in search_queries:
+        q_filter |= Q(name__icontains=q)
+        q_filter |= Q(code__icontains=q)
 
-    products_list = list(products_qs.values('id', 'code', 'name', 'manufacturer')[:1000])
+    products = Product.objects.filter(q_filter).order_by('name')[:30]
 
-    # 2. Har biriga ball berish
-    scored_products = []
-
-    for p in products_list:
-        score = 0
-        name_lower = (p['name'] or '').lower()
-        code_lower = (p['code'] or '').lower()
-        manufacturer_lower = (p['manufacturer'] or '').lower()
-
-        # Kod aniq mos
-        if code_lower == query_lower:
-            score += 10000
-        elif code_lower.startswith(query_lower):
-            score += 200
-        elif query_lower in code_lower:
-            score += 100
-
-        # Nom aniq mos
-        if name_lower == query_lower:
-            score += 90000
-        elif name_lower.startswith(query_lower):
-            score += 3000
-        elif f' {query_lower}' in f' {name_lower}':
-            score += 150
-
-        # Har bir so'z uchun
-        words_found = 0
-        for word in words:
-            if word in name_lower:
-                words_found += 1
-                if name_lower.startswith(word):
-                    score += 50
-                elif f' {word}' in name_lower:
-                    score += 30
-                else:
-                    score += 10
-
-            if word in code_lower:
-                words_found += 1
-                score += 20
-
-            if word in manufacturer_lower:
-                words_found += 1
-                score += 5
-
-        # Barcha so'zlar topildi - bonus
-        if len(words) > 1 and words_found >= len(words):
-            score += 100
-
-        if score > 0:
-            scored_products.append({
-                'id': p['id'],
-                'code': p['code'],
-                'name': p['name'],
-                'manufacturer': p['manufacturer'] or '',
-                'score': score
-            })
-
-    # 3. Ball bo'yicha tartiblash
-    scored_products.sort(key=lambda x: (-x['score'], x['name'].lower()))
-
-    # 4. Eng yaxshi 30 tasini qaytarish
     result = [{
-        'id': p['id'],
-        'code': p['code'],
-        'name': p['name'],
-        'manufacturer': p['manufacturer'],
-    } for p in scored_products[:30]]
+        'id': p.id,
+        'code': p.code,
+        'name': p.name,
+        'manufacturer': p.manufacturer or '',
+    } for p in products]
 
     return JsonResponse({'products': result})
 
