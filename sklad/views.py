@@ -758,7 +758,7 @@ def revizor_search_products(request):
 
         # Kod aniq mos
         if code_lower == query_lower:
-            score += 1000
+            score += 10000
         elif code_lower.startswith(query_lower):
             score += 200
         elif query_lower in code_lower:
@@ -766,9 +766,9 @@ def revizor_search_products(request):
 
         # Nom aniq mos
         if name_lower == query_lower:
-            score += 900
+            score += 90000
         elif name_lower.startswith(query_lower):
-            score += 300
+            score += 3000
         elif f' {query_lower}' in f' {name_lower}':
             score += 150
 
