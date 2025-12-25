@@ -555,6 +555,24 @@ let timeout;
 let results = [];
 let selectedIdx = -1;
 
+// Sana avtomatik formatlash (01122027 -> 01.12.2027)
+document.getElementById('modalExpiry').addEventListener('input', function(e) {
+    let pos = this.selectionStart;
+    let oldLen = this.value.length;
+
+    let value = this.value.replace(/\D/g, '');
+    if (value.length >= 2) value = value.slice(0, 2) + '.' + value.slice(2);
+    if (value.length >= 5) value = value.slice(0, 5) + '.' + value.slice(5);
+    if (value.length > 10) value = value.slice(0, 10);
+
+    this.value = value;
+
+    // Kursor pozitsiyasini saqlash
+    let newLen = this.value.length;
+    pos = pos + (newLen - oldLen);
+    this.setSelectionRange(pos, pos);
+});
+
 // SEARCH
 searchInput.addEventListener('input', function() {
     const q = this.value.trim();
