@@ -63,10 +63,12 @@
 
         <!-- UMUMIY NATIJALAR CARD -->
         <div class="col-6 col-md-3">
-            <a href="{% url 'admin_warehouse_combined_results' warehouse.pk %}" class="stat-card stat-card-clickable stat-card-results">
-                <div class="stat-icon stat-icon-results"><i class="bi bi-bar-chart-line-fill"></i></div>
-                <div class="stat-value-text">Natijalar</div>
-                <div class="stat-label">Umumiy natijalar →</div>
+            <a href="{% url 'admin_warehouse_combined_results' warehouse.pk %}" class="stat-card-link">
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="bi bi-bar-chart-line"></i></div>
+                    <div class="stat-value">📊</div>
+                    <div class="stat-label">Umumiy natijalar</div>
+                </div>
             </a>
         </div>
     </div>
@@ -148,42 +150,19 @@
 </div>
 
 <style>
-/* Umumiy natijalar stat card */
-.stat-card-clickable {
+.stat-card-link {
     text-decoration: none;
+    display: block;
+}
+
+.stat-card-link:hover .stat-card {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card-link .stat-card {
+    transition: all 0.2s ease;
     cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.stat-card-clickable:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.35);
-}
-
-.stat-card-results {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-    border: none !important;
-}
-
-.stat-card-results .stat-icon-results {
-    background: rgba(255, 255, 255, 0.2) !important;
-    color: #fff !important;
-}
-
-.stat-card-results .stat-value-text {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 0.25rem;
-}
-
-.stat-card-results .stat-label {
-    color: rgba(255, 255, 255, 0.9) !important;
-    font-weight: 500;
-}
-
-.stat-card-results:hover .stat-label {
-    color: #fff !important;
 }
 </style>
 {% endblock %}
