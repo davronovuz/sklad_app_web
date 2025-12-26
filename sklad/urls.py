@@ -24,6 +24,8 @@ urlpatterns = [
     path('admin-panel/warehouse/<int:warehouse_pk>/inventory/upload/', views.admin_inventory_upload,
          name='admin_inventory_upload'),
 
+
+
     # ==================== ADMIN: REVIZORS ====================
     path('admin-panel/revizors/', views.admin_revizors, name='admin_revizors'),
     path('admin-panel/revizors/create/', views.admin_revizor_create, name='admin_revizor_create'),
@@ -39,6 +41,15 @@ urlpatterns = [
     path('admin-panel/revision/<int:pk>/export/', views.admin_revision_export, name='admin_revision_export'),
     path('admin-panel/revision/<int:pk>/unaccounted/export/', views.admin_unaccounted_export,
          name='admin_unaccounted_export'),
+
+    # Ombor bo'yicha umumiy natijalar
+    path('admin-panel/warehouse/<int:warehouse_pk>/combined-results/',
+         views.admin_warehouse_combined_results,
+         name='admin_warehouse_combined_results'),
+
+    path('admin-panel/warehouse/<int:warehouse_pk>/combined-results/export/',
+         views.admin_warehouse_combined_export,
+         name='admin_warehouse_combined_export'),
 
     # ==================== REVIZOR: DASHBOARD ====================
     path('revizor/', views.revizor_dashboard, name='revizor_dashboard'),

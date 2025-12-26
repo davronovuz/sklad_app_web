@@ -1,0 +1,530 @@
+{% extends 'sklad/base.html' %}
+
+{% block title %}Umumiy natijalar - {{ warehouse.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Statistika */
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 992px) {
+        .stats-row { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 576px) {
+        .stats-row { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .stat-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.25rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border-left: 4px solid;
+        transition: transform 0.2s;
+        cursor: pointer;
+    }
+
+    .stat-card:hover { transform: translateY(-2px); }
+
+    .stat-card.total { border-color: #6366f1; }
+    .stat-card.correct { border-color: #10b981; }
+    .stat-card.shortage { border-color: #ef4444; }
+    .stat-card.excess { border-color: #f59e0b; }
+    .stat-card.not-counted { border-color: #94a3b8; }
+
+    .stat-card-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-card.total .stat-card-value { color: #6366f1; }
+    .stat-card.correct .stat-card-value { color: #10b981; }
+    .stat-card.shortage .stat-card-value { color: #ef4444; }
+    .stat-card.excess .stat-card-value { color: #f59e0b; }
+    .stat-card.not-counted .stat-card-value { color: #94a3b8; }
+
+    .stat-card-label { color: #64748b; font-size: 13px; }
+
+    /* Toolbar */
+    .toolbar {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .filter-group {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .filter-btn {
+        padding: 0.5rem 1rem;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        border-radius: 8px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-decoration: none;
+        color: #475569;
+    }
+
+    .filter-btn:hover { border-color: #6366f1; color: #6366f1; }
+    .filter-btn.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+
+    .filter-select, .search-input {
+        padding: 0.5rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 13px;
+    }
+
+    .filter-select { min-width: 180px; }
+    .search-input { width: 200px; }
+    .filter-select:focus, .search-input:focus { outline: none; border-color: #6366f1; }
+
+    .btn-export {
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: #10b981;
+        color: #fff;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+
+    .btn-export:hover { background: #059669; color: #fff; }
+
+    /* Table */
+    .results-table-wrapper {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        overflow: hidden;
+        margin-bottom: 2rem;
+    }
+
+    .table-scroll {
+        overflow-x: auto;
+        max-height: 65vh;
+    }
+
+    .results-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+    .results-table th {
+        background: #f8fafc;
+        padding: 12px 10px;
+        text-align: left;
+        font-weight: 600;
+        color: #475569;
+        border-bottom: 2px solid #e2e8f0;
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .results-table td {
+        padding: 10px;
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: top;
+    }
+
+    .results-table tbody tr:hover { background: #f8fafc; }
+
+    /* Row colors */
+    .results-table tr.row-correct { background: #f0fdf4; }
+    .results-table tr.row-shortage { background: #fef2f2; }
+    .results-table tr.row-excess { background: #fefce8; }
+    .results-table tr.row-not_counted { background: #f1f5f9; }
+
+    .results-table tr.row-correct:hover { background: #dcfce7; }
+    .results-table tr.row-shortage:hover { background: #fee2e2; }
+    .results-table tr.row-excess:hover { background: #fef9c3; }
+
+    /* Columns */
+    .col-num { width: 45px; text-align: center; color: #94a3b8; font-weight: 500; }
+    .col-qty { text-align: right; font-family: 'Monaco', 'Consolas', monospace; font-weight: 600; }
+    .col-result { text-align: center; width: 65px; }
+    .col-series { max-width: 100px; }
+    .col-expiry { white-space: nowrap; }
+
+    .result-correct { color: #10b981; font-weight: 700; font-size: 18px; }
+    .result-plus { color: #f59e0b; font-weight: 700; font-size: 14px; }
+    .result-minus { color: #ef4444; font-weight: 700; font-size: 14px; }
+    .result-none { color: #cbd5e1; }
+
+    /* Product info */
+    .product-name { font-weight: 600; color: #1e293b; margin-bottom: 2px; }
+    .product-code { font-size: 11px; color: #94a3b8; }
+    .product-manufacturer { color: #64748b; font-size: 12px; }
+
+    /* Partiyalar */
+    .partiya-list {
+        font-size: 11px;
+        color: #64748b;
+        margin-top: 4px;
+    }
+
+    .partiya-item {
+        display: flex;
+        gap: 8px;
+        padding: 2px 0;
+        border-top: 1px dashed #e2e8f0;
+    }
+
+    .partiya-item:first-child { border-top: none; }
+
+    /* Revizor badge */
+    .revizor-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        background: #e0e7ff;
+        color: #4338ca;
+        border-radius: 12px;
+        font-size: 11px;
+        margin: 1px;
+        white-space: nowrap;
+    }
+
+    /* Info banner */
+    .info-banner {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: #fff;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .info-banner h4 { margin: 0 0 0.25rem 0; font-weight: 600; }
+    .info-banner p { margin: 0; opacity: 0.9; font-size: 14px; }
+
+    /* Unaccounted section */
+    .unaccounted-section {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border-left: 4px solid #f59e0b;
+        margin-top: 1.5rem;
+    }
+
+    .unaccounted-title {
+        font-weight: 600;
+        color: #f59e0b;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 16px;
+    }
+
+    /* Empty state */
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #94a3b8;
+    }
+
+    .empty-state i { font-size: 3rem; margin-bottom: 1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav class="breadcrumb-nav mb-2">
+                <a href="{% url 'admin_dashboard' %}" style="color: #6366f1;">Omborlar</a>
+                <span class="mx-2 text-muted">/</span>
+                <a href="{% url 'admin_warehouse_detail' warehouse.pk %}" style="color: #6366f1;">{{ warehouse.name }}</a>
+                <span class="mx-2 text-muted">/</span>
+                <span class="text-muted">Umumiy natijalar</span>
+            </nav>
+            <h1 class="page-title mb-0">📊 Umumiy natijalar</h1>
+        </div>
+        <a href="{% url 'admin_warehouse_detail' warehouse.pk %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>Orqaga
+        </a>
+    </div>
+
+    <!-- Info banner -->
+    <div class="info-banner">
+        <div>
+            <h4><i class="bi bi-layers me-2"></i>{{ revisions_count }} ta reviziya birlashtirildi</h4>
+            <p>{{ warehouse.name }} - Barcha tugallangan reviziyalar natijalari</p>
+        </div>
+        <div>
+            <span style="font-size: 24px; font-weight: 700;">{{ stats.total }}</span>
+            <span style="opacity: 0.8;"> pozitsiya</span>
+        </div>
+    </div>
+
+    <!-- Statistika -->
+    <div class="stats-row">
+        <a href="?" class="stat-card total text-decoration-none">
+            <div class="stat-card-value">{{ stats.total }}</div>
+            <div class="stat-card-label">📦 Jami</div>
+        </a>
+        <a href="?status=correct" class="stat-card correct text-decoration-none">
+            <div class="stat-card-value">{{ stats.correct }}</div>
+            <div class="stat-card-label">✓ To'g'ri</div>
+        </a>
+        <a href="?status=shortage" class="stat-card shortage text-decoration-none">
+            <div class="stat-card-value">{{ stats.shortage }}</div>
+            <div class="stat-card-label">− Kam</div>
+        </a>
+        <a href="?status=excess" class="stat-card excess text-decoration-none">
+            <div class="stat-card-value">{{ stats.excess }}</div>
+            <div class="stat-card-label">+ Ko'p</div>
+        </a>
+        <a href="?status=not_counted" class="stat-card not-counted text-decoration-none">
+            <div class="stat-card-value">{{ stats.not_counted }}</div>
+            <div class="stat-card-label">⊘ Sanalmagan</div>
+        </a>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <div class="filter-group">
+            <!-- Status filter -->
+            <a href="?{% if revizor_filter %}revizor={{ revizor_filter }}&{% endif %}{% if search %}search={{ search }}{% endif %}"
+               class="filter-btn {% if not status_filter %}active{% endif %}">Hammasi</a>
+            <a href="?status=correct{% if revizor_filter %}&revizor={{ revizor_filter }}{% endif %}{% if search %}&search={{ search }}{% endif %}"
+               class="filter-btn {% if status_filter == 'correct' %}active{% endif %}">✓ To'g'ri</a>
+            <a href="?status=shortage{% if revizor_filter %}&revizor={{ revizor_filter }}{% endif %}{% if search %}&search={{ search }}{% endif %}"
+               class="filter-btn {% if status_filter == 'shortage' %}active{% endif %}">− Kam</a>
+            <a href="?status=excess{% if revizor_filter %}&revizor={{ revizor_filter }}{% endif %}{% if search %}&search={{ search }}{% endif %}"
+               class="filter-btn {% if status_filter == 'excess' %}active{% endif %}">+ Ko'p</a>
+            <a href="?status=not_counted{% if revizor_filter %}&revizor={{ revizor_filter }}{% endif %}{% if search %}&search={{ search }}{% endif %}"
+               class="filter-btn {% if status_filter == 'not_counted' %}active{% endif %}">⊘ Sanalmagan</a>
+        </div>
+
+        <div class="filter-group">
+            <!-- Revizor filter -->
+            <select class="filter-select" onchange="filterByRevizor(this.value)">
+                <option value="">👤 Barcha revizorlar</option>
+                {% for revizor in all_revizors %}
+                <option value="{{ revizor.pk }}" {% if revizor_filter == revizor.pk|stringformat:"s" %}selected{% endif %}>
+                    {{ revizor.full_name|default:revizor.username }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <!-- Search -->
+            <form method="get" class="d-flex gap-2">
+                {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+                {% if revizor_filter %}<input type="hidden" name="revizor" value="{{ revizor_filter }}">{% endif %}
+                <input type="text" name="search" value="{{ search }}" class="search-input" placeholder="🔍 Tovar qidirish...">
+                <button type="submit" class="filter-btn">Qidirish</button>
+                {% if search %}
+                <a href="?{% if status_filter %}status={{ status_filter }}&{% endif %}{% if revizor_filter %}revizor={{ revizor_filter }}{% endif %}"
+                   class="filter-btn">✕</a>
+                {% endif %}
+            </form>
+        </div>
+
+        <div class="filter-group">
+            <a href="{% url 'admin_warehouse_combined_export' warehouse.pk %}?{% if status_filter %}status={{ status_filter }}&{% endif %}{% if revizor_filter %}revizor={{ revizor_filter }}{% endif %}"
+               class="btn-export">
+                <i class="bi bi-download"></i> CSV yuklab olish
+            </a>
+        </div>
+    </div>
+
+    <!-- Results table -->
+    <div class="results-table-wrapper">
+        <div class="table-scroll">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th class="col-num">№</th>
+                        <th style="min-width: 250px;">Наименование</th>
+                        <th style="min-width: 150px;">Производитель</th>
+                        <th class="col-series">Серия</th>
+                        <th class="col-expiry">Годность</th>
+                        <th class="col-qty">1C қолдиқ</th>
+                        <th class="col-qty">Саналди</th>
+                        <th class="col-result">Тугри</th>
+                        <th class="col-result">Плюс</th>
+                        <th class="col-result">Минус</th>
+                        <th style="min-width: 120px;">Ревизор</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in results %}
+                    <tr class="row-{{ result.status }}">
+                        <td class="col-num">{{ forloop.counter }}</td>
+                        <td>
+                            <div class="product-name">{{ result.product.name }}</div>
+                            {% if result.product.code %}
+                            <div class="product-code">Kod: {{ result.product.code }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="product-manufacturer">{{ result.product.manufacturer|default:"—" }}</td>
+                        <td class="col-series">
+                            {% if result.inventory_items %}
+                                {% for item in result.inventory_items %}
+                                    {% if item.series %}{{ item.series }}{% if not forloop.last %}<br>{% endif %}{% endif %}
+                                {% empty %}
+                                    —
+                                {% endfor %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="col-expiry">
+                            {% if result.inventory_items %}
+                                {% for item in result.inventory_items %}
+                                    {% if item.expiry_date %}{{ item.expiry_date|date:"d.m.Y" }}{% if not forloop.last %}<br>{% endif %}{% endif %}
+                                {% empty %}
+                                    —
+                                {% endfor %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="col-qty">{{ result.expected_quantity|floatformat:0 }}</td>
+                        <td class="col-qty">
+                            {% if result.actual_quantity > 0 %}
+                                {{ result.actual_quantity|floatformat:0 }}
+                            {% else %}
+                                <span class="result-none">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="col-result">
+                            {% if result.status == 'correct' %}
+                                <span class="result-correct">✓</span>
+                            {% endif %}
+                        </td>
+                        <td class="col-result">
+                            {% if result.status == 'excess' %}
+                                <span class="result-plus">+{{ result.difference|floatformat:0 }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="col-result">
+                            {% if result.status == 'shortage' %}
+                                <span class="result-minus">{{ result.difference|floatformat:0 }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if result.revizors %}
+                                {% for name in result.revizors.split:', ' %}
+                                    <span class="revizor-badge">{{ name }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="11">
+                            <div class="empty-state">
+                                <i class="bi bi-inbox"></i>
+                                <p>Ma'lumot topilmadi</p>
+                                {% if search or status_filter or revizor_filter %}
+                                <a href="?" class="btn btn-sm btn-outline-primary mt-2">Filtrlarni tozalash</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Natija soni -->
+    {% if results %}
+    <div class="text-muted text-center mb-4">
+        Ko'rsatilmoqda: <strong>{{ results|length }}</strong> ta tovar
+    </div>
+    {% endif %}
+
+    <!-- Hisobda yo'q tovarlar -->
+    {% if unaccounted %}
+    <div class="unaccounted-section">
+        <div class="unaccounted-title">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            Hisobda yo'q tovarlar (1C da yo'q, omborda topildi) — {{ unaccounted|length }} ta
+        </div>
+
+        <div class="table-scroll" style="max-height: 300px;">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th class="col-num">№</th>
+                        <th>Наименование</th>
+                        <th>Производитель</th>
+                        <th class="col-qty">Топилди</th>
+                        <th>Ревизор</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in unaccounted %}
+                    <tr style="background: #fefce8;">
+                        <td class="col-num">{{ forloop.counter }}</td>
+                        <td>
+                            <div class="product-name">{{ item.product.name }}</div>
+                        </td>
+                        <td class="product-manufacturer">{{ item.product.manufacturer|default:"—" }}</td>
+                        <td class="col-qty" style="color: #f59e0b; font-weight: 700;">
+                            +{{ item.quantity|floatformat:0 }}
+                        </td>
+                        <td>
+                            {% for name in item.revizors.split:', ' %}
+                                <span class="revizor-badge">{{ name }}</span>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function filterByRevizor(revizorId) {
+    let url = new URL(window.location.href);
+    if (revizorId) {
+        url.searchParams.set('revizor', revizorId);
+    } else {
+        url.searchParams.delete('revizor');
+    }
+    window.location.href = url.toString();
+}
+</script>
+{% endblock %}

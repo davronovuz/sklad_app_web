@@ -1268,3 +1268,403 @@ def calculate_revision_results(revision):
                     quantity=item.quantity,
                     revizor=item.revizor
                 )
+
+
+# ============================================
+# OMBOR BO'YICHA UMUMIY NATIJALAR - TO'LIQ VERSIYA
+# views.py ga qo'shing
+# ============================================
+# urls.py ga ham qo'shing:
+# path('admin-panel/warehouse/<int:warehouse_pk>/combined-results/', views.admin_warehouse_combined_results, name='admin_warehouse_combined_results'),
+# path('admin-panel/warehouse/<int:warehouse_pk>/combined-results/export/', views.admin_warehouse_combined_export, name='admin_warehouse_combined_export'),
+# ============================================
+
+@login_required
+def admin_warehouse_combined_results(request, warehouse_pk):
+    """
+    Ombor bo'yicha BARCHA reviziyalar natijasini birlashtirish
+    BARCHA MA'LUMOTLAR: nom, ishlab chiqaruvchi, seriya, srok, miqdor
+    """
+    if not request.user.is_admin:
+        return redirect('revizor_dashboard')
+
+    warehouse = get_object_or_404(Warehouse, pk=warehouse_pk, created_by=request.user)
+
+    # Shu ombordagi barcha TUGALLANGAN reviziyalar
+    revisions = Revision.objects.filter(
+        warehouse=warehouse,
+        status='completed'
+    )
+
+    if not revisions.exists():
+        messages.warning(request, 'Tugallangan reviziyalar yo\'q!')
+        return redirect('admin_warehouse_detail', pk=warehouse_pk)
+
+    # Barcha revizorlar ro'yxati (filter uchun)
+    all_revizors = User.objects.filter(
+        revision_items__revision__in=revisions
+    ).distinct()
+
+    # Filterlar
+    status_filter = request.GET.get('status', '')
+    revizor_filter = request.GET.get('revizor', '')
+    search = request.GET.get('search', '')
+
+    # 1C qoldiqlari - BARCHA MA'LUMOTLAR BILAN
+    inventory_items = Inventory.objects.filter(
+        warehouse=warehouse
+    ).select_related('product').order_by('product__name', 'expiry_date')
+
+    # BARCHA reviziyalardagi tovarlarni olish
+    revision_items_qs = RevisionItem.objects.filter(
+        revision__in=revisions
+    ).select_related('product', 'revizor')
+
+    # Revizor filter
+    if revizor_filter:
+        revision_items_qs = revision_items_qs.filter(revizor_id=revizor_filter)
+
+    # Revizor ma'lumotlarini TOVAR BO'YICHA guruhlab olish
+    # Key: product_id
+    revizor_by_product = {}  # {product_id: total_qty}
+    revizor_names_by_product = {}  # {product_id: set of revizor names}
+    revizor_details_by_product = {}  # {product_id: [{revizor, qty, series, expiry}]}
+
+    for item in revision_items_qs:
+        product_id = item.product_id
+        if product_id not in revizor_by_product:
+            revizor_by_product[product_id] = Decimal('0')
+            revizor_names_by_product[product_id] = set()
+            revizor_details_by_product[product_id] = []
+
+        revizor_by_product[product_id] += item.quantity
+        revizor_names_by_product[product_id].add(
+            item.revizor.full_name or item.revizor.username
+        )
+        revizor_details_by_product[product_id].append({
+            'revizor': item.revizor.full_name or item.revizor.username,
+            'quantity': item.quantity,
+            'series': item.series or '',
+            'expiry_date': item.expiry_date,
+        })
+
+    # Natijalar ro'yxatini tuzish
+    results = []
+    stats = {
+        'total': 0,
+        'correct': 0,
+        'shortage': 0,
+        'excess': 0,
+        'not_counted': 0,
+    }
+
+    # Tovarlarni guruhlab olish (bir xil tovar bir nechta qatorda bo'lmasligi uchun)
+    inventory_by_product = {}
+    for inv in inventory_items:
+        product_id = inv.product_id
+        if product_id not in inventory_by_product:
+            inventory_by_product[product_id] = {
+                'product': inv.product,
+                'total_qty': Decimal('0'),
+                'items': []  # Har bir partiya
+            }
+        inventory_by_product[product_id]['total_qty'] += inv.quantity
+        inventory_by_product[product_id]['items'].append({
+            'series': inv.series or '',
+            'expiry_date': inv.expiry_date,
+            'quantity': inv.quantity
+        })
+
+    # Har bir tovar uchun natija
+    for product_id, inv_data in inventory_by_product.items():
+        product = inv_data['product']
+        expected_total = inv_data['total_qty']
+        actual_total = revizor_by_product.get(product_id, Decimal('0'))
+
+        difference = actual_total - expected_total
+
+        # Status aniqlash
+        if actual_total == 0:
+            status = 'not_counted'
+        elif difference == 0:
+            status = 'correct'
+        elif difference < 0:
+            status = 'shortage'
+        else:
+            status = 'excess'
+
+        # Filter: status
+        if status_filter and status != status_filter:
+            continue
+
+        # Filter: search
+        if search:
+            search_lower = search.lower()
+            if (search_lower not in product.name.lower() and
+                    search_lower not in (product.code or '').lower() and
+                    search_lower not in (product.manufacturer or '').lower()):
+                continue
+
+        stats['total'] += 1
+        stats[status] += 1
+
+        # Revizorlar ro'yxati
+        revizors_set = revizor_names_by_product.get(product_id, set())
+        revizors = ', '.join(revizors_set) if revizors_set else ''
+
+        # Partiyalar ro'yxati (srok bo'yicha saralangan)
+        inventory_items_sorted = sorted(
+            inv_data['items'],
+            key=lambda x: x['expiry_date'] or datetime(2099, 1, 1).date()
+        )
+
+        results.append({
+            'product': product,
+            'expected_quantity': expected_total,
+            'actual_quantity': actual_total,
+            'difference': difference,
+            'status': status,
+            'revizors': revizors,
+            'inventory_items': inventory_items_sorted,  # Partiyalar
+            'revizor_details': revizor_details_by_product.get(product_id, []),
+        })
+
+    # Hisobda yo'q tovarlar (1C da yo'q, lekin revizor sanagan)
+    unaccounted = []
+    for product_id, actual_qty in revizor_by_product.items():
+        if product_id not in inventory_by_product:
+            product = Product.objects.get(pk=product_id)
+            revizors_set = revizor_names_by_product.get(product_id, set())
+            revizors = ', '.join(revizors_set) if revizors_set else ''
+            details = revizor_details_by_product.get(product_id, [])
+            unaccounted.append({
+                'product': product,
+                'quantity': actual_qty,
+                'revizors': revizors,
+                'details': details,
+            })
+
+    # Saralash - avval kamlar, keyin ortiqlar, keyin sanalmagan, oxirida to'g'ri
+    results.sort(key=lambda x: (
+        0 if x['status'] == 'shortage' else
+        1 if x['status'] == 'excess' else
+        2 if x['status'] == 'not_counted' else 3,
+        x['product'].name
+    ))
+
+    context = {
+        'warehouse': warehouse,
+        'revisions': revisions,
+        'revisions_count': revisions.count(),
+        'results': results,
+        'stats': stats,
+        'unaccounted': unaccounted,
+        'status_filter': status_filter,
+        'revizor_filter': revizor_filter,
+        'search': search,
+        'all_revizors': all_revizors,
+    }
+
+    return render(request, 'sklad/admin/warehouse_combined_results.html', context)
+
+
+@login_required
+def admin_warehouse_combined_export(request, warehouse_pk):
+    """
+    Umumiy natijalarni CSV ga eksport
+    BARCHA MA'LUMOTLAR: TZ formatida
+    """
+    if not request.user.is_admin:
+        return redirect('revizor_dashboard')
+
+    warehouse = get_object_or_404(Warehouse, pk=warehouse_pk, created_by=request.user)
+
+    # Filterlar
+    status_filter = request.GET.get('status', '')
+    revizor_filter = request.GET.get('revizor', '')
+
+    revisions = Revision.objects.filter(warehouse=warehouse, status='completed')
+    inventory_items = Inventory.objects.filter(warehouse=warehouse).select_related('product')
+
+    # 1C ma'lumotlari - partiyalar bilan
+    inventory_by_product = {}
+    for inv in inventory_items:
+        product_id = inv.product_id
+        if product_id not in inventory_by_product:
+            inventory_by_product[product_id] = {
+                'product': inv.product,
+                'total_qty': Decimal('0'),
+                'items': []
+            }
+        inventory_by_product[product_id]['total_qty'] += inv.quantity
+        inventory_by_product[product_id]['items'].append({
+            'series': inv.series or '',
+            'expiry_date': inv.expiry_date,
+            'quantity': inv.quantity
+        })
+
+    # Revizor ma'lumotlari
+    revision_items_qs = RevisionItem.objects.filter(revision__in=revisions).select_related('product', 'revizor')
+
+    if revizor_filter:
+        revision_items_qs = revision_items_qs.filter(revizor_id=revizor_filter)
+
+    revizor_by_product = {}
+    revizor_names_by_product = {}
+
+    for item in revision_items_qs:
+        product_id = item.product_id
+        if product_id not in revizor_by_product:
+            revizor_by_product[product_id] = Decimal('0')
+            revizor_names_by_product[product_id] = set()
+        revizor_by_product[product_id] += item.quantity
+        revizor_names_by_product[product_id].add(item.revizor.full_name or item.revizor.username)
+
+    # CSV yaratish
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    filename = f"{warehouse.name}_natijalar"
+    if revizor_filter:
+        revizor = User.objects.filter(pk=revizor_filter).first()
+        if revizor:
+            filename += f"_{revizor.username}"
+    if status_filter:
+        filename += f"_{status_filter}"
+    response['Content-Disposition'] = f'attachment; filename="{filename}.csv"'
+
+    writer = csv.writer(response, delimiter=';')
+
+    # TZ bo'yicha sarlavhalar
+    writer.writerow([
+        '№',
+        'Наименование',
+        'Производитель',
+        'Серия',
+        'Годность',
+        'Количество (1C)',
+        'Саналди',
+        'Тугри',
+        'Плюс',
+        'Минус',
+        'Ревизор'
+    ])
+
+    row_num = 1
+
+    # Saralash
+    sorted_products = sorted(
+        inventory_by_product.items(),
+        key=lambda x: (
+            0 if (revizor_by_product.get(x[0], 0) - x[1]['total_qty']) < 0 else
+            1 if (revizor_by_product.get(x[0], 0) - x[1]['total_qty']) > 0 else
+            2 if revizor_by_product.get(x[0], 0) == 0 else 3,
+            x[1]['product'].name
+        )
+    )
+
+    for product_id, inv_data in sorted_products:
+        product = inv_data['product']
+        expected = inv_data['total_qty']
+        actual = revizor_by_product.get(product_id, Decimal('0'))
+        difference = actual - expected
+
+        if actual == 0:
+            status = 'not_counted'
+        elif difference == 0:
+            status = 'correct'
+        elif difference < 0:
+            status = 'shortage'
+        else:
+            status = 'excess'
+
+        # Status filter
+        if status_filter and status != status_filter:
+            continue
+
+        revizors = ', '.join(revizor_names_by_product.get(product_id, []))
+
+        # TZ formatidagi ustunlar
+        tugri = '✓' if status == 'correct' else ''
+        plus_val = f'+{int(difference)}' if status == 'excess' else ''
+        minus_val = str(int(difference)) if status == 'shortage' else ''
+
+        # Partiyalarni ko'rsatish
+        items = inv_data['items']
+        if items:
+            # Birinchi partiya asosiy qatorda
+            first_item = items[0]
+            writer.writerow([
+                row_num,
+                product.name,
+                product.manufacturer or '',
+                first_item['series'],
+                first_item['expiry_date'].strftime('%d.%m.%Y') if first_item['expiry_date'] else '',
+                int(expected),
+                int(actual) if actual > 0 else '',
+                tugri,
+                plus_val,
+                minus_val,
+                revizors
+            ])
+            row_num += 1
+
+            # Qo'shimcha partiyalar (agar mavjud bo'lsa)
+            # for item in items[1:]:
+            #     writer.writerow([
+            #         '',  # № bo'sh
+            #         f'  └─ {product.name}',
+            #         '',
+            #         item['series'],
+            #         item['expiry_date'].strftime('%d.%m.%Y') if item['expiry_date'] else '',
+            #         int(item['quantity']),
+            #         '',
+            #         '',
+            #         '',
+            #         '',
+            #         ''
+            #     ])
+        else:
+            writer.writerow([
+                row_num,
+                product.name,
+                product.manufacturer or '',
+                '',
+                '',
+                int(expected),
+                int(actual) if actual > 0 else '',
+                tugri,
+                plus_val,
+                minus_val,
+                revizors
+            ])
+            row_num += 1
+
+    # Hisobda yo'q tovarlar
+    if not status_filter or status_filter == 'unaccounted':
+        unaccounted_products = [
+            (pid, qty) for pid, qty in revizor_by_product.items()
+            if pid not in inventory_by_product
+        ]
+
+        if unaccounted_products:
+            writer.writerow([])  # Bo'sh qator
+            writer.writerow(['', 'HISOBDA YO\'Q TOVARLAR (1C da yo\'q)', '', '', '', '', '', '', '', '', ''])
+
+            for product_id, qty in unaccounted_products:
+                product = Product.objects.get(pk=product_id)
+                revizors = ', '.join(revizor_names_by_product.get(product_id, []))
+                writer.writerow([
+                    row_num,
+                    product.name,
+                    product.manufacturer or '',
+                    '',
+                    '',
+                    0,
+                    int(qty),
+                    '',
+                    f'+{int(qty)}',
+                    '',
+                    revizors
+                ])
+                row_num += 1
+
+    return response
