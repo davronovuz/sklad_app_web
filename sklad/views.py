@@ -342,16 +342,18 @@ def admin_products_upload(request):
 # YANGILANGAN admin_inventory_upload
 # views.py dagi eskisini shu bilan almashtiring
 # ============================================
+# ============================================
+# OPTIMALLASHTIRILGAN admin_inventory_upload
+# views.py dagi eskisini shu bilan almashtiring
+# ============================================
 
 @login_required
 def admin_inventory_upload(request, warehouse_pk):
     """
-    1C dan tovar qoldig'i yuklash
+    1C dan tovar qoldig'i yuklash - OPTIMALLASHTIRILGAN
 
-    1C FORMAT (haqiqiy):
-    - Sarlavha qatorlari (o'tkazib yuboriladi)
-    - Ustunlar: Куп, Наименование, Производитель, Срок годность, Остаток, Кам
-    - Tovar NOMI bo'yicha qidiriladi (kod yo'q)
+    Muammo: 4000+ qator = timeout
+    Yechim: Batch insert + bulk_create
     """
     if not request.user.is_admin:
         return redirect('revizor_dashboard')
@@ -383,33 +385,35 @@ def admin_inventory_upload(request, warehouse_pk):
 
             # Eskisini tozalash
             if clear_old:
-                deleted_count = Inventory.objects.filter(warehouse=warehouse).delete()[0]
+                Inventory.objects.filter(warehouse=warehouse).delete()
 
-            # Delimiter aniqlash
-            first_data_line = ''
-            for line in lines[5:15]:  # 5-15 qatorlar orasidan qidirish
-                if line.strip() and not line.startswith('Остат') and not line.startswith('Куп'):
-                    first_data_line = line
-                    break
+            # ========== OPTIMALLASHTIRISH ==========
+            # Barcha produktlarni bir marta yuklab olish (cache)
+            products_cache = {}
+            for p in Product.objects.all().values('id', 'name'):
+                # Nom bo'yicha cache (kichik harfda)
+                products_cache[p['name'].lower().strip()] = p['id']
 
-            delimiter = ',' if ',' in first_data_line else ';'
+            # Ma'lumotlarni yig'ish
+            inventory_to_create = []
+            inventory_to_update = []
 
             count = 0
-            errors = []
             skipped = 0
+            errors = []
 
-            # Sarlavha qatorlarini o'tkazib yuborish va ma'lumotlarni o'qish
+            # Sarlavha qatorlarini o'tkazib yuborish
             data_started = False
 
             for line_num, line in enumerate(lines, 1):
                 line = line.strip()
 
                 # Bo'sh qatorni o'tkazish
-                if not line or line == ',,,,,':
+                if not line or line.startswith(',,,'):
                     continue
 
                 # "Итого" qatoriga yetganda to'xtatish
-                if line.startswith('Итого') or line.startswith('Мат.отв'):
+                if 'Итого' in line or 'Мат.отв' in line:
                     break
 
                 # Sarlavha qatorini aniqlash
@@ -422,27 +426,29 @@ def admin_inventory_upload(request, warehouse_pk):
                     continue
 
                 # CSV qatorini parse qilish
-                parts = []
-                current = ''
-                in_quotes = False
+                parts = line.split(',')
 
-                for char in line:
-                    if char == '"':
-                        in_quotes = not in_quotes
-                    elif char == delimiter and not in_quotes:
-                        parts.append(current.strip().strip('"'))
-                        current = ''
-                    else:
-                        current += char
-                parts.append(current.strip().strip('"'))
+                # Qo'shtirnoqli maydonlarni to'g'ri parse qilish
+                if '"' in line:
+                    parts = []
+                    current = ''
+                    in_quotes = False
+                    for char in line:
+                        if char == '"':
+                            in_quotes = not in_quotes
+                        elif char == ',' and not in_quotes:
+                            parts.append(current.strip().strip('"'))
+                            current = ''
+                        else:
+                            current += char
+                    parts.append(current.strip().strip('"'))
 
-                # Ustunlarni olish (1C format: Куп, Наименование, Производитель, Срок, Остаток, Кам)
+                # Ustunlarni olish
                 if len(parts) < 5:
                     continue
 
-                # Indekslar: 0=Куп(bo'sh), 1=Наименование, 2=Производитель, 3=Срок, 4=Остаток
+                # 0=Куп(bo'sh), 1=Наименование, 2=Производитель, 3=Срок, 4=Остаток
                 name = parts[1].strip() if len(parts) > 1 else ''
-                manufacturer = parts[2].strip() if len(parts) > 2 else ''
                 expiry_str = parts[3].strip() if len(parts) > 3 else ''
                 quantity_str = parts[4].strip() if len(parts) > 4 else '0'
 
@@ -450,31 +456,27 @@ def admin_inventory_upload(request, warehouse_pk):
                 if not name or name == 'К.':
                     continue
 
-                # Tovarni NOM bo'yicha topish
-                product = Product.objects.filter(name__iexact=name).first()
+                # Tovarni CACHE dan topish (tez!)
+                name_lower = name.lower().strip()
+                product_id = products_cache.get(name_lower)
 
-                # Agar topilmasa, qisman qidirish
-                if not product:
-                    product = Product.objects.filter(name__icontains=name).first()
+                if not product_id:
+                    # Qisman qidirish
+                    for cached_name, cached_id in products_cache.items():
+                        if name_lower in cached_name or cached_name in name_lower:
+                            product_id = cached_id
+                            break
 
-                # Agar hali ham topilmasa
-                if not product:
-                    # Ishlab chiqaruvchi bilan birga qidirish
-                    product = Product.objects.filter(
-                        name__icontains=name.split()[0] if name else '',
-                        manufacturer__icontains=manufacturer.split()[0] if manufacturer else ''
-                    ).first()
-
-                if not product:
-                    if len(errors) < 20:  # Faqat 20 ta xatoni saqlash
-                        errors.append(f"Topilmadi: {name[:50]}...")
+                if not product_id:
+                    if len(errors) < 10:
+                        errors.append(name[:40])
                     skipped += 1
                     continue
 
                 # Sanani parse qilish
                 expiry_date = None
                 if expiry_str:
-                    for fmt in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y', '%d.%m.%y']:
+                    for fmt in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y']:
                         try:
                             expiry_date = datetime.strptime(expiry_str, fmt).date()
                             break
@@ -483,7 +485,6 @@ def admin_inventory_upload(request, warehouse_pk):
 
                 # Miqdorni parse qilish
                 try:
-                    # "1 234,5" yoki "1234.5" formatini qo'llab-quvvatlash
                     qty_clean = quantity_str.replace(' ', '').replace(',', '.')
                     qty = Decimal(qty_clean) if qty_clean else Decimal('0')
                 except:
@@ -492,31 +493,42 @@ def admin_inventory_upload(request, warehouse_pk):
                 if qty <= 0:
                     continue
 
-                # Inventoryga qo'shish yoki yangilash
-                # Seriya yo'q, shuning uchun bo'sh string
-                Inventory.objects.update_or_create(
+                # Inventory obyektini yaratish
+                inventory_to_create.append(Inventory(
                     warehouse=warehouse,
-                    product=product,
-                    series='',  # 1C da seriya yo'q
+                    product_id=product_id,
+                    series='',
                     expiry_date=expiry_date,
-                    defaults={'quantity': qty}
-                )
+                    quantity=qty
+                ))
                 count += 1
+
+                # Har 500 tadan BULK INSERT
+                if len(inventory_to_create) >= 500:
+                    Inventory.objects.bulk_create(
+                        inventory_to_create,
+                        ignore_conflicts=True
+                    )
+                    inventory_to_create = []
+
+            # Qolganlarini saqlash
+            if inventory_to_create:
+                Inventory.objects.bulk_create(
+                    inventory_to_create,
+                    ignore_conflicts=True
+                )
 
             # Natija xabari
             if count > 0:
                 messages.success(request, f'✅ {count} ta qoldiq yuklandi!')
             else:
-                messages.warning(request, 'Hech qanday qoldiq yuklanmadi. Fayl formatini tekshiring.')
+                messages.warning(request, 'Hech qanday qoldiq yuklanmadi.')
 
             if skipped > 0:
                 messages.warning(request, f'⚠️ {skipped} ta tovar nomenklaturada topilmadi.')
 
             if errors:
-                error_msg = '; '.join(errors[:5])
-                if len(errors) > 5:
-                    error_msg += f'... va yana {len(errors) - 5} ta'
-                messages.info(request, f'Topilmagan tovarlar: {error_msg}')
+                messages.info(request, f'Topilmagan: {", ".join(errors[:5])}...')
 
         except Exception as e:
             messages.error(request, f'Xatolik: {str(e)}')
@@ -524,7 +536,6 @@ def admin_inventory_upload(request, warehouse_pk):
         return redirect('admin_warehouse_detail', pk=warehouse_pk)
 
     return render(request, 'sklad/admin/inventory_upload.html', {'warehouse': warehouse})
-
 # ==================== REVIZOR MANAGEMENT ====================
 
 @login_required
