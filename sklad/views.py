@@ -346,14 +346,22 @@ def admin_products_upload(request):
 # OPTIMALLASHTIRILGAN admin_inventory_upload
 # views.py dagi eskisini shu bilan almashtiring
 # ============================================
+# ============================================
+# TO'LIQ OPTIMALLASHTIRILGAN admin_inventory_upload
+# BARCHA 1C FORMATLARINI QO'LLAB-QUVVATLAYDI
+# views.py dagi eskisini shu bilan almashtiring
+# ============================================
 
 @login_required
 def admin_inventory_upload(request, warehouse_pk):
     """
-    1C dan tovar qoldig'i yuklash - OPTIMALLASHTIRILGAN
+    1C dan tovar qoldig'i yuklash - UNIVERSAL
 
-    Muammo: 4000+ qator = timeout
-    Yechim: Batch insert + bulk_create
+    Qo'llab-quvvatlanadigan formatlar:
+    1. Vergul (,) delimiter
+    2. Nuqtali vergul (;) delimiter
+    3. Sarlavhali va sarlavhasiz
+    4. UTF-8, UTF-8-BOM, Windows-1251
     """
     if not request.user.is_admin:
         return redirect('revizor_dashboard')
@@ -373,110 +381,120 @@ def admin_inventory_upload(request, warehouse_pk):
             content = file.read()
 
             # Encoding aniqlash
-            try:
-                decoded = content.decode('utf-8-sig')
-            except:
+            decoded = None
+            for encoding in ['utf-8-sig', 'utf-8', 'cp1251', 'latin-1']:
                 try:
-                    decoded = content.decode('cp1251')
+                    decoded = content.decode(encoding)
+                    break
                 except:
-                    decoded = content.decode('latin-1')
+                    continue
+
+            if not decoded:
+                messages.error(request, 'Fayl encodingini aniqlab bo\'lmadi!')
+                return redirect('admin_warehouse_detail', pk=warehouse_pk)
 
             lines = decoded.splitlines()
+
+            if not lines:
+                messages.error(request, 'Fayl bo\'sh!')
+                return redirect('admin_warehouse_detail', pk=warehouse_pk)
 
             # Eskisini tozalash
             if clear_old:
                 Inventory.objects.filter(warehouse=warehouse).delete()
 
-            # ========== OPTIMALLASHTIRISH ==========
-            # Barcha produktlarni bir marta yuklab olish (cache)
+            # ========== DELIMITER ANIQLASH ==========
+            first_line = lines[0]
+            delimiter = ';' if ';' in first_line else ','
+
+            # ========== PRODUCTS CACHE ==========
             products_cache = {}
             for p in Product.objects.all().values('id', 'name'):
-                # Nom bo'yicha cache (kichik harfda)
-                products_cache[p['name'].lower().strip()] = p['id']
+                name_clean = p['name'].lower().strip()
+                products_cache[name_clean] = p['id']
 
-            # Ma'lumotlarni yig'ish
+            if not products_cache:
+                messages.error(request, 'Nomenklatura bo\'sh! Avval nomenklatura yuklang.')
+                return redirect('admin_warehouse_detail', pk=warehouse_pk)
+
+            # ========== MA'LUMOTLARNI YIGISH ==========
             inventory_to_create = []
-            inventory_to_update = []
-
             count = 0
             skipped = 0
-            errors = []
-
-            # Sarlavha qatorlarini o'tkazib yuborish
-            data_started = False
+            errors_list = []
 
             for line_num, line in enumerate(lines, 1):
                 line = line.strip()
 
                 # Bo'sh qatorni o'tkazish
-                if not line or line.startswith(',,,'):
+                if not line:
                     continue
 
                 # "Итого" qatoriga yetganda to'xtatish
-                if 'Итого' in line or 'Мат.отв' in line:
+                if 'Итого' in line or 'Мат.отв' in line or 'итого' in line:
                     break
 
-                # Sarlavha qatorini aniqlash
-                if 'Наименование' in line or 'наименование' in line:
-                    data_started = True
-                    continue
-
-                # Faqat ma'lumot qatorlarini o'qish
-                if not data_started:
+                # Sarlavha qatorlarini o'tkazish
+                if any(word in line for word in
+                       ['Наименование', 'наименование', 'Остатки по товар', 'Остаток на', ';;К.;', ',,К.,']):
                     continue
 
                 # CSV qatorini parse qilish
-                parts = line.split(',')
+                parts = []
+                current = ''
+                in_quotes = False
 
-                # Qo'shtirnoqli maydonlarni to'g'ri parse qilish
-                if '"' in line:
-                    parts = []
-                    current = ''
-                    in_quotes = False
-                    for char in line:
-                        if char == '"':
-                            in_quotes = not in_quotes
-                        elif char == ',' and not in_quotes:
-                            parts.append(current.strip().strip('"'))
-                            current = ''
-                        else:
-                            current += char
-                    parts.append(current.strip().strip('"'))
+                for char in line:
+                    if char == '"':
+                        in_quotes = not in_quotes
+                    elif char == delimiter and not in_quotes:
+                        parts.append(current.strip().strip('"'))
+                        current = ''
+                    else:
+                        current += char
+                parts.append(current.strip().strip('"'))
 
                 # Ustunlarni olish
+                # Format: Куп;Наименование;Производитель;Срок годность;Остаток;Кам
+                # Index:   0       1            2             3           4      5
+
                 if len(parts) < 5:
                     continue
 
-                # 0=Куп(bo'sh), 1=Наименование, 2=Производитель, 3=Срок, 4=Остаток
                 name = parts[1].strip() if len(parts) > 1 else ''
                 expiry_str = parts[3].strip() if len(parts) > 3 else ''
                 quantity_str = parts[4].strip() if len(parts) > 4 else '0'
 
-                # Bo'sh nomni o'tkazish
-                if not name or name == 'К.':
+                # Bo'sh yoki noto'g'ri nomni o'tkazish
+                if not name or name == 'К.' or name == 'K.' or len(name) < 2:
                     continue
 
-                # Tovarni CACHE dan topish (tez!)
+                # Tovarni CACHE dan topish
                 name_lower = name.lower().strip()
                 product_id = products_cache.get(name_lower)
 
+                # Agar topilmasa, qisman qidirish
                 if not product_id:
-                    # Qisman qidirish
                     for cached_name, cached_id in products_cache.items():
-                        if name_lower in cached_name or cached_name in name_lower:
+                        if name_lower == cached_name:
                             product_id = cached_id
                             break
+                        # Qisman moslik (80% mos bo'lsa)
+                        if len(name_lower) > 10:
+                            if name_lower[:15] == cached_name[:15]:
+                                product_id = cached_id
+                                break
 
                 if not product_id:
-                    if len(errors) < 10:
-                        errors.append(name[:40])
+                    if len(errors_list) < 15:
+                        errors_list.append(name[:35])
                     skipped += 1
                     continue
 
                 # Sanani parse qilish
                 expiry_date = None
                 if expiry_str:
-                    for fmt in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y']:
+                    for fmt in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y', '%d.%m.%y']:
                         try:
                             expiry_date = datetime.strptime(expiry_str, fmt).date()
                             break
@@ -485,7 +503,7 @@ def admin_inventory_upload(request, warehouse_pk):
 
                 # Miqdorni parse qilish
                 try:
-                    qty_clean = quantity_str.replace(' ', '').replace(',', '.')
+                    qty_clean = quantity_str.replace(' ', '').replace(',', '.').replace('\xa0', '')
                     qty = Decimal(qty_clean) if qty_clean else Decimal('0')
                 except:
                     qty = Decimal('0')
@@ -518,17 +536,19 @@ def admin_inventory_upload(request, warehouse_pk):
                     ignore_conflicts=True
                 )
 
-            # Natija xabari
+            # ========== NATIJA XABARI ==========
             if count > 0:
-                messages.success(request, f'✅ {count} ta qoldiq yuklandi!')
+                messages.success(request, f'✅ {count} ta qoldiq muvaffaqiyatli yuklandi!')
             else:
-                messages.warning(request, 'Hech qanday qoldiq yuklanmadi.')
+                messages.warning(request,
+                                 '⚠️ Hech qanday qoldiq yuklanmadi. Tovar nomlari nomenklatura bilan mos kelmagan bo\'lishi mumkin.')
 
             if skipped > 0:
                 messages.warning(request, f'⚠️ {skipped} ta tovar nomenklaturada topilmadi.')
 
-            if errors:
-                messages.info(request, f'Topilmagan: {", ".join(errors[:5])}...')
+            if errors_list:
+                messages.info(request,
+                              f'Topilmagan tovarlar: {", ".join(errors_list[:5])}{"..." if len(errors_list) > 5 else ""}')
 
         except Exception as e:
             messages.error(request, f'Xatolik: {str(e)}')
@@ -536,7 +556,6 @@ def admin_inventory_upload(request, warehouse_pk):
         return redirect('admin_warehouse_detail', pk=warehouse_pk)
 
     return render(request, 'sklad/admin/inventory_upload.html', {'warehouse': warehouse})
-# ==================== REVIZOR MANAGEMENT ====================
 
 @login_required
 def admin_revizors(request):
