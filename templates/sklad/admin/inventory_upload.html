@@ -1,69 +1,111 @@
 {% extends 'sklad/base.html' %}
 
-{% block title %}Qoldiq yuklash | Sklad Reviziya{% endblock %}
+{% block title %}Qoldiq yuklash - {{ warehouse.name }}{% endblock %}
 
 {% block content %}
 <div class="fade-in">
     <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-4">
-        <ol class="breadcrumb" style="font-size: 14px;">
-            <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}" class="text-secondary">Omborlar</a></li>
-            <li class="breadcrumb-item"><a href="{% url 'admin_warehouse_detail' warehouse.pk %}" class="text-secondary">{{ warehouse.name }}</a></li>
-            <li class="breadcrumb-item active text-white">Qoldiq yuklash</li>
-        </ol>
+    <nav class="breadcrumb-nav mb-4">
+        <a href="{% url 'admin_dashboard' %}">Omborlar</a>
+        <span>/</span>
+        <a href="{% url 'admin_warehouse_detail' warehouse.pk %}">{{ warehouse.name }}</a>
+        <span>/</span>
+        <span>Qoldiq yuklash</span>
     </nav>
 
-    <div class="row justify-content-center">
-        <div class="col-lg-6">
-            <div class="card-custom">
-                <div class="card-header">
-                    <i class="bi bi-upload me-2"></i>1C dan tovar qoldig'i yuklash
+    <div class="card">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-center gap-3 mb-4">
+                <div class="icon-box">
+                    <i class="bi bi-cloud-upload"></i>
                 </div>
-                <div class="card-body">
-                    <div class="alert alert-custom alert-warning mb-4">
-                        <i class="bi bi-exclamation-triangle me-2"></i>
-                        <strong>{{ warehouse.name }}</strong> ombori uchun qoldiq yuklanadi
-                    </div>
-
-                    <form method="post" enctype="multipart/form-data">
-                        {% csrf_token %}
-
-                        <div class="mb-4">
-                            <label class="form-label">CSV fayl <span class="text-danger">*</span></label>
-                            <input type="file" name="file" class="form-control" accept=".csv" required>
-                        </div>
-
-                        <div class="mb-4">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="clear_old" id="clearOld" checked>
-                                <label class="form-check-label" for="clearOld">
-                                    Eski qoldiqlarni o'chirish
-                                </label>
-                                <div class="form-text">Yangi yuklashdan oldin eski ma'lumotlarni tozalash</div>
-                            </div>
-                        </div>
-
-                        <div class="alert alert-custom alert-info mb-4">
-                            <strong><i class="bi bi-info-circle me-2"></i>CSV formati:</strong><br>
-                            <code style="font-size: 12px;">code;series;expiry_date;quantity</code><br>
-                            <small class="text-secondary">
-                                Yoki: kod, seriya, srok, ostatok<br>
-                                Sana formati: 31.12.2025 yoki 2025-12-31
-                            </small>
-                        </div>
-
-                        <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-primary-custom">
-                                <i class="bi bi-upload me-2"></i>Yuklash
-                            </button>
-                            <a href="{% url 'admin_warehouse_detail' warehouse.pk %}" class="btn btn-outline-custom">
-                                Bekor qilish
-                            </a>
-                        </div>
-                    </form>
+                <div>
+                    <h4 class="mb-1">1C dan tovar qoldig'i yuklash</h4>
+                    <p class="text-muted mb-0">{{ warehouse.name }} ombori uchun</p>
                 </div>
             </div>
+
+            <!-- Ogohlantirish -->
+            <div class="alert alert-warning mb-4">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>{{ warehouse.name }}</strong> ombori uchun qoldiq yuklanadi
+            </div>
+
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">CSV fayl <span class="text-danger">*</span></label>
+                    <input type="file" name="file" class="form-control" accept=".csv" required>
+                </div>
+
+                <div class="mb-4">
+                    <div class="form-check">
+                        <input type="checkbox" name="clear_old" id="clear_old" class="form-check-input" checked>
+                        <label for="clear_old" class="form-check-label">Eski qoldiqlarni o'chirish</label>
+                    </div>
+                    <small class="text-muted">Yangi yuklashdan oldin eski ma'lumotlarni tozalash</small>
+                </div>
+
+                <!-- 1C FORMAT HAQIDA -->
+                <div class="alert alert-info mb-4">
+                    <h6 class="alert-heading mb-2">
+                        <i class="bi bi-info-circle me-2"></i>1C eksport formati:
+                    </h6>
+                    <p class="mb-2">1C dan "Остатки по товаров на складах" hisobotini CSV formatida eksport qiling.</p>
+                    <p class="mb-2"><strong>Ustunlar:</strong></p>
+                    <code class="d-block bg-light p-2 rounded mb-2">
+                        Куп | Наименование | Производитель | Срок годность | Остаток | Кам
+                    </code>
+                    <p class="mb-0 small text-muted">
+                        <i class="bi bi-lightbulb me-1"></i>
+                        Tovarlar <strong>nomi bo'yicha</strong> nomenklatura bilan solishtiriladi.
+                        Nomenklaturadagi nom 1C dagi nom bilan bir xil bo'lishi kerak.
+                    </p>
+                </div>
+
+                <div class="d-flex gap-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-upload me-2"></i>Yuklash
+                    </button>
+                    <a href="{% url 'admin_warehouse_detail' warehouse.pk %}" class="btn btn-outline-secondary">
+                        Bekor qilish
+                    </a>
+                </div>
+            </form>
         </div>
     </div>
 </div>
+
+<style>
+    .icon-box {
+        width: 56px;
+        height: 56px;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 24px;
+    }
+
+    .breadcrumb-nav {
+        font-size: 14px;
+        color: #64748b;
+    }
+
+    .breadcrumb-nav a {
+        color: #6366f1;
+        text-decoration: none;
+    }
+
+    .breadcrumb-nav a:hover {
+        text-decoration: underline;
+    }
+
+    .breadcrumb-nav span {
+        margin: 0 8px;
+    }
+</style>
 {% endblock %}

@@ -338,10 +338,21 @@ def admin_products_upload(request):
     return render(request, 'sklad/admin/products_upload.html')
 
 # ==================== INVENTORY (1C QOLDIQ) ====================
+# ============================================
+# YANGILANGAN admin_inventory_upload
+# views.py dagi eskisini shu bilan almashtiring
+# ============================================
 
 @login_required
 def admin_inventory_upload(request, warehouse_pk):
-    """1C dan tovar qoldig'i yuklash"""
+    """
+    1C dan tovar qoldig'i yuklash
+
+    1C FORMAT (haqiqiy):
+    - Sarlavha qatorlari (o'tkazib yuboriladi)
+    - Ustunlar: Куп, Наименование, Производитель, Срок годность, Остаток, Кам
+    - Tovar NOMI bo'yicha qidiriladi (kod yo'q)
+    """
     if not request.user.is_admin:
         return redirect('revizor_dashboard')
 
@@ -356,58 +367,156 @@ def admin_inventory_upload(request, warehouse_pk):
             return redirect('admin_warehouse_detail', pk=warehouse_pk)
 
         try:
+            # Faylni o'qish
+            content = file.read()
+
+            # Encoding aniqlash
+            try:
+                decoded = content.decode('utf-8-sig')
+            except:
+                try:
+                    decoded = content.decode('cp1251')
+                except:
+                    decoded = content.decode('latin-1')
+
+            lines = decoded.splitlines()
+
             # Eskisini tozalash
             if clear_old:
-                Inventory.objects.filter(warehouse=warehouse).delete()
+                deleted_count = Inventory.objects.filter(warehouse=warehouse).delete()[0]
 
-            decoded = file.read().decode('utf-8-sig').splitlines()
-            reader = csv.DictReader(decoded, delimiter=';')
+            # Delimiter aniqlash
+            first_data_line = ''
+            for line in lines[5:15]:  # 5-15 qatorlar orasidan qidirish
+                if line.strip() and not line.startswith('Остат') and not line.startswith('Куп'):
+                    first_data_line = line
+                    break
+
+            delimiter = ',' if ',' in first_data_line else ';'
+
             count = 0
             errors = []
+            skipped = 0
 
-            for row in reader:
-                code = row.get('code') or row.get('kod') or row.get('нумерация') or row.get('№')
-                series = row.get('series') or row.get('seriya') or row.get('серия') or ''
-                expiry = row.get('expiry_date') or row.get('srok') or row.get('срок') or ''
-                quantity = row.get('quantity') or row.get('ostatok') or row.get('остатка') or row.get('qoldiq') or '0'
+            # Sarlavha qatorlarini o'tkazib yuborish va ma'lumotlarni o'qish
+            data_started = False
 
-                if not code:
+            for line_num, line in enumerate(lines, 1):
+                line = line.strip()
+
+                # Bo'sh qatorni o'tkazish
+                if not line or line == ',,,,,':
                     continue
 
-                # Tovarni topish
-                product = Product.objects.filter(code=str(code).strip()).first()
+                # "Итого" qatoriga yetganda to'xtatish
+                if line.startswith('Итого') or line.startswith('Мат.отв'):
+                    break
+
+                # Sarlavha qatorini aniqlash
+                if 'Наименование' in line or 'наименование' in line:
+                    data_started = True
+                    continue
+
+                # Faqat ma'lumot qatorlarini o'qish
+                if not data_started:
+                    continue
+
+                # CSV qatorini parse qilish
+                parts = []
+                current = ''
+                in_quotes = False
+
+                for char in line:
+                    if char == '"':
+                        in_quotes = not in_quotes
+                    elif char == delimiter and not in_quotes:
+                        parts.append(current.strip().strip('"'))
+                        current = ''
+                    else:
+                        current += char
+                parts.append(current.strip().strip('"'))
+
+                # Ustunlarni olish (1C format: Куп, Наименование, Производитель, Срок, Остаток, Кам)
+                if len(parts) < 5:
+                    continue
+
+                # Indekslar: 0=Куп(bo'sh), 1=Наименование, 2=Производитель, 3=Срок, 4=Остаток
+                name = parts[1].strip() if len(parts) > 1 else ''
+                manufacturer = parts[2].strip() if len(parts) > 2 else ''
+                expiry_str = parts[3].strip() if len(parts) > 3 else ''
+                quantity_str = parts[4].strip() if len(parts) > 4 else '0'
+
+                # Bo'sh nomni o'tkazish
+                if not name or name == 'К.':
+                    continue
+
+                # Tovarni NOM bo'yicha topish
+                product = Product.objects.filter(name__iexact=name).first()
+
+                # Agar topilmasa, qisman qidirish
                 if not product:
-                    errors.append(f"Tovar topilmadi: {code}")
+                    product = Product.objects.filter(name__icontains=name).first()
+
+                # Agar hali ham topilmasa
+                if not product:
+                    # Ishlab chiqaruvchi bilan birga qidirish
+                    product = Product.objects.filter(
+                        name__icontains=name.split()[0] if name else '',
+                        manufacturer__icontains=manufacturer.split()[0] if manufacturer else ''
+                    ).first()
+
+                if not product:
+                    if len(errors) < 20:  # Faqat 20 ta xatoni saqlash
+                        errors.append(f"Topilmadi: {name[:50]}...")
+                    skipped += 1
                     continue
 
                 # Sanani parse qilish
                 expiry_date = None
-                if expiry:
-                    for fmt in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y']:
+                if expiry_str:
+                    for fmt in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y', '%d.%m.%y']:
                         try:
-                            expiry_date = datetime.strptime(str(expiry).strip(), fmt).date()
+                            expiry_date = datetime.strptime(expiry_str, fmt).date()
                             break
                         except:
                             continue
 
                 # Miqdorni parse qilish
                 try:
-                    qty = Decimal(str(quantity).replace(',', '.').strip())
+                    # "1 234,5" yoki "1234.5" formatini qo'llab-quvvatlash
+                    qty_clean = quantity_str.replace(' ', '').replace(',', '.')
+                    qty = Decimal(qty_clean) if qty_clean else Decimal('0')
                 except:
                     qty = Decimal('0')
 
+                if qty <= 0:
+                    continue
+
+                # Inventoryga qo'shish yoki yangilash
+                # Seriya yo'q, shuning uchun bo'sh string
                 Inventory.objects.update_or_create(
                     warehouse=warehouse,
                     product=product,
-                    series=str(series).strip(),
+                    series='',  # 1C da seriya yo'q
                     expiry_date=expiry_date,
                     defaults={'quantity': qty}
                 )
                 count += 1
 
-            messages.success(request, f'{count} ta qoldiq yuklandi!')
+            # Natija xabari
+            if count > 0:
+                messages.success(request, f'✅ {count} ta qoldiq yuklandi!')
+            else:
+                messages.warning(request, 'Hech qanday qoldiq yuklanmadi. Fayl formatini tekshiring.')
+
+            if skipped > 0:
+                messages.warning(request, f'⚠️ {skipped} ta tovar nomenklaturada topilmadi.')
+
             if errors:
-                messages.warning(request, f'Xatolar: {", ".join(errors[:5])}...')
+                error_msg = '; '.join(errors[:5])
+                if len(errors) > 5:
+                    error_msg += f'... va yana {len(errors) - 5} ta'
+                messages.info(request, f'Topilmagan tovarlar: {error_msg}')
 
         except Exception as e:
             messages.error(request, f'Xatolik: {str(e)}')
@@ -415,7 +524,6 @@ def admin_inventory_upload(request, warehouse_pk):
         return redirect('admin_warehouse_detail', pk=warehouse_pk)
 
     return render(request, 'sklad/admin/inventory_upload.html', {'warehouse': warehouse})
-
 
 # ==================== REVIZOR MANAGEMENT ====================
 
