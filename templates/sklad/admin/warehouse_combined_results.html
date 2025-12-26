@@ -27,6 +27,8 @@
         border-left: 4px solid;
         transition: transform 0.2s;
         cursor: pointer;
+        text-decoration: none;
+        display: block;
     }
 
     .stat-card:hover { transform: translateY(-2px); }
@@ -183,22 +185,6 @@
     .product-code { font-size: 11px; color: #94a3b8; }
     .product-manufacturer { color: #64748b; font-size: 12px; }
 
-    /* Partiyalar */
-    .partiya-list {
-        font-size: 11px;
-        color: #64748b;
-        margin-top: 4px;
-    }
-
-    .partiya-item {
-        display: flex;
-        gap: 8px;
-        padding: 2px 0;
-        border-top: 1px dashed #e2e8f0;
-    }
-
-    .partiya-item:first-child { border-top: none; }
-
     /* Revizor badge */
     .revizor-badge {
         display: inline-block;
@@ -292,23 +278,23 @@
 
     <!-- Statistika -->
     <div class="stats-row">
-        <a href="?" class="stat-card total text-decoration-none">
+        <a href="?" class="stat-card total">
             <div class="stat-card-value">{{ stats.total }}</div>
             <div class="stat-card-label">📦 Jami</div>
         </a>
-        <a href="?status=correct" class="stat-card correct text-decoration-none">
+        <a href="?status=correct" class="stat-card correct">
             <div class="stat-card-value">{{ stats.correct }}</div>
             <div class="stat-card-label">✓ To'g'ri</div>
         </a>
-        <a href="?status=shortage" class="stat-card shortage text-decoration-none">
+        <a href="?status=shortage" class="stat-card shortage">
             <div class="stat-card-value">{{ stats.shortage }}</div>
             <div class="stat-card-label">− Kam</div>
         </a>
-        <a href="?status=excess" class="stat-card excess text-decoration-none">
+        <a href="?status=excess" class="stat-card excess">
             <div class="stat-card-value">{{ stats.excess }}</div>
             <div class="stat-card-label">+ Ko'p</div>
         </a>
-        <a href="?status=not_counted" class="stat-card not-counted text-decoration-none">
+        <a href="?status=not_counted" class="stat-card not-counted">
             <div class="stat-card-value">{{ stats.not_counted }}</div>
             <div class="stat-card-label">⊘ Sanalmagan</div>
         </a>
@@ -439,9 +425,7 @@
                         </td>
                         <td>
                             {% if result.revizors %}
-                                {% for name in result.revizors.split:', ' %}
-                                    <span class="revizor-badge">{{ name }}</span>
-                                {% endfor %}
+                                <span class="revizor-badge">{{ result.revizors }}</span>
                             {% else %}
                                 <span class="text-muted">—</span>
                             {% endif %}
@@ -503,9 +487,11 @@
                             +{{ item.quantity|floatformat:0 }}
                         </td>
                         <td>
-                            {% for name in item.revizors.split:', ' %}
-                                <span class="revizor-badge">{{ name }}</span>
-                            {% endfor %}
+                            {% if item.revizors %}
+                                <span class="revizor-badge">{{ item.revizors }}</span>
+                            {% else %}
+                                —
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
